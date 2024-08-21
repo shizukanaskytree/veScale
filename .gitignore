@@ -31,3 +31,4 @@
 *.checkpoint_dir
 *.distcp
 .metadata
+examples/nanogpt_4D_finetune/data/shakespeare/

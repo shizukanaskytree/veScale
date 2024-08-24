@@ -65,14 +65,7 @@
 # # repo_path = repo.git.rev_parse("--show-toplevel")
 # # print(f"repo_path: {repo_path}")
 # ### 建议手动写, 有时 git 获得 repo_path 会报错
-
-
 # repo_path = "/root/vescale_prj/veScale/"
-# torch_path = "/usr/local/lib/python3.10/dist-packages/torch/"
-
-# profiling_paths = []
-# profiling_paths.append(repo_path)
-# # profiling_paths.append(torch_path)
 
 # ### 你可以修改 tracefunc 函数以仅将输出写入文件而不打印在终端上。你只需要移除将消息写入 original_stdout 的部分
 # def tracefunc(frame, event, arg, indent=[0], output_file=None, original_stdout=None):
@@ -93,8 +86,7 @@
 #     if file_path:
 #         file_path = os.path.abspath(file_path)
 #         ### Check if the code is within the desired directory or repository
-#         # if file_path.startswith(repo_path):
-#         if any(file_path.startswith(repo_path) for repo_path in profiling_paths):
+#         if file_path.startswith(repo_path):
 #             if event == "call":
 #                 ### Increases the indentation level.
 #                 indent[0] += 2
@@ -114,7 +106,6 @@
 #                     original_stdout.write(msg)
 #                 indent[0] -= 2
 #     return tracefunc
-
 # ################################################################################
 
 
@@ -141,24 +132,44 @@ from sharding_plan import nanoGPT_plan, nanoGPT_plan_dist_dropout
 import vescale
 from vescale.dtensor.random import manual_seed
 
-def debug_at_rank_n(rank_id):
-    """If distributed is initialized, print only on rank n."""
-    if torch.distributed.is_initialized():
-        if torch.distributed.get_rank() == rank_id:
-            message = f'debug at rank {torch.distributed.get_rank()}'
-            # print(message, flush=True)
-            ### print yellow color
-            print(f"\033[93m{message}\033[00m", flush=True)
-            import debugpy
-            debugpy.listen(5678)
-            debugpy.wait_for_client()
-            debugpy.breakpoint()
-    else:
-        message = 'You are not in distributed mode.'
-        print(message, flush=True)
+from vescale.ndtimeline import init_ndtimers, flush, wait
 
-yellow_color = "\033[93m"
-reset_color = "\033[00m"
+
+import torch.distributed as dist
+
+def get_rank_info():
+    if dist.is_initialized():
+        rank = dist.get_rank()
+        local_rank = int(os.environ.get('LOCAL_RANK', rank % torch.cuda.device_count()))
+        world_size = dist.get_world_size()
+        yellow_color = "\033[93m"
+        reset_color = "\033[00m"
+        print(f"{yellow_color}Rank: {rank}/{world_size-1}{reset_color}")
+        return rank, local_rank, world_size
+    else:
+        yellow_color = "\033[93m"
+        reset_color = "\033[00m"
+        print(f"{yellow_color}Distributed not initialized.{reset_color}")
+        return None, None, None
+
+
+### ?
+# def debug_at_rank_n(rank_id):
+#     """If distributed is initialized, print only on rank n."""
+#     if torch.distributed.is_initialized():
+#         if torch.distributed.get_rank() == rank_id:
+#             message = f'debug at rank {torch.distributed.get_rank()}'
+#             # print(message, flush=True)
+#             ### print yellow color
+#             print(f"\033[93m{message}\033[00m", flush=True)
+#             import debugpy
+#             debugpy.listen(5678)
+#             debugpy.wait_for_client()
+#             debugpy.breakpoint()
+#     else:
+#         message = 'You are not in distributed mode.'
+#         print(message, flush=True)
+
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -170,25 +181,21 @@ eval_iters = 200
 eval_only = False  # if True, script exits right after the first eval
 always_save_checkpoint = True  # if True, always save a checkpoint after each eval
 init_from = "scratch"  # 'scratch' or 'resume' or 'gpt2*'
-
 # wandb logging
 wandb_log = False  # disabled by default
 wandb_project = "owt"
 wandb_run_name = "gpt2"  # 'run' + str(time.time())
-
 # data
 dataset = "openwebtext"
 gradient_accumulation_steps = 5 * 8  # used to simulate larger batch sizes
 batch_size = 12  # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
-
 # model
 n_layer = 12
 n_head = 12
 n_embd = 768
 dropout = 0.0  # for pretraining 0 is good, for finetuning try 0.1+
 bias = False  # do we use bias inside LayerNorm and Linear layers?
-
 # adamw optimizer
 learning_rate = 6e-4  # max learning rate
 max_iters = 600000  # total number of training iterations
@@ -196,16 +203,13 @@ weight_decay = 1e-1
 beta1 = 0.9
 beta2 = 0.95
 grad_clip = 1.0  # clip gradients at this value, or disable if == 0.0
-
 # learning rate decay settings
 decay_lr = True  # whether to decay the learning rate
 warmup_iters = 2000  # how many steps to warm up for
 lr_decay_iters = 600000  # should be ~= max_iters per Chinchilla
 min_lr = 6e-5  # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
-
 # DDP settings
 backend = "nccl"  # 'nccl', 'gloo', etc.
-
 # system
 device = "cuda"  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype = (
@@ -223,45 +227,46 @@ async_checkpoint = False
 broadcast_checkpoint = False
 config = {}
 
-yellow_color = "\033[93m"
-reset_color = "\033[00m"
 
 def main():
+
+    # debug_at_rank_n(0)  # Example: Debug only at rank 0
+
     world_size = dp_size * tp_size
     local_batch_size = batch_size
 
     wandb_run_name = f"{world_size}gpu-dp{dp_size}-tp{tp_size}"
-    print(f"{yellow_color}Running with {world_size} GPUs, dp{dp_size}, tp{tp_size}.{reset_color}")
 
     # various inits, derived attributes, I/O setup
     # ddp = world_size > 1
-    ddp = int(os.environ.get("RANK", -1)) != -1 # torchrun will automatically assign RANK for each process.
+    ddp = int(os.environ.get("RANK", -1)) != -1
     if ddp:
-        print(f"{yellow_color}In the ddp branch...{reset_color}")
+        yellow_color = "\033[93m"
+        reset_color = "\033[00m"
+        print(f"{yellow_color}in the ddp branch...{reset_color}")
 
-        world_size = int(os.environ["WORLD_SIZE"]) # torchrun will automatically assign RANK for each process.
+        world_size = int(os.environ["WORLD_SIZE"])
         rank = int(os.environ["RANK"])
-        device = f"cuda:{rank}"
-        print(f"{yellow_color}Process {rank} out of {world_size} is running at {device}.{reset_color}")
 
+        ### xxx profiling below xxx
+        ### https://github.com/volcengine/veScale/blob/main/vescale/ndtimeline/README.md#how-to-use-ndtimeline
+        init_ndtimers(rank=int(rank), local_rank=int(rank), enable_streamer=True)
+        ### xxx profiling above xxx
+
+
+        device = f"cuda:{rank}"
         torch.cuda.set_device(device)
         init_process_group(backend=backend, world_size=world_size, rank=rank)
-
-        ### debug at rank 0
-        # debug_at_rank_n(0) # 有效
-
         # + + + VeScale API below
         VESCALE_DEVICE_MESH.init_device_mesh(device, (dp_size, tp_size), mesh_dim_names=["DP", "TP"])
         mesh = VESCALE_DEVICE_MESH.get()
         # + + + VeScale API above
-
         ddp_rank = get_rank() // tp_size
     else:
         rank = 0
         ddp_rank = 0
         device = f"cuda:{rank}"
         torch.cuda.set_device(device)
-
     # world_size number of processes will be training simultaneously, so we can scale
     # down the desired gradient accumulation iterations per process proportionally
     master_process = rank == 0  # this process will do logging, checkpointing etc.
@@ -275,16 +280,26 @@ def main():
     if master_process:
         os.makedirs(out_dir, exist_ok=True)
     torch.manual_seed(1337)
-
     # + + + VeScale API below
     manual_seed(1337, mesh)
     # + + + VeScale API above
-
     torch.backends.cuda.matmul.allow_tf32 = True  # allow tf32 on matmul
     torch.backends.cudnn.allow_tf32 = True  # allow tf32 on cudnn
     device_type = "cuda" if "cuda" in device else "cpu"  # for later use in torch.autocast
     # note: float16 data type will automatically use a GradScaler
     ptdtype = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[dtype]
+
+
+    # Get rank information
+    rank, local_rank, world_size = get_rank_info()
+
+    # Further processing depending on rank...
+    if rank is not None:
+        yellow_color = "\033[93m"
+        reset_color = "\033[00m"
+        print(f"{yellow_color}Process {rank} out of {world_size} is running.{reset_color}")
+
+
 
     # poor man's data loader
     data_dir = os.path.join("data", dataset)
@@ -344,7 +359,6 @@ def main():
         vocab_size=None,
         dropout=dropout,
     )  # start with model_args from command line
-
     if init_from == "scratch":
         # init a new model from scratch
         print("Initializing a new model from scratch")
@@ -373,7 +387,6 @@ def main():
         model_args["vocab_size"] = meta_vocab_size if meta_vocab_size is not None else 50304
         gptconf = GPTConfig(**model_args)
         model = GPT(gptconf)
-
     # crop down the model block size if desired, using model surgery
     if block_size < model.config.block_size:
         model.crop_block_size(block_size)
@@ -381,8 +394,6 @@ def main():
     model.to(ptdtype)
 
     # initialize a GradScaler. If enabled=False scaler is a no-op
-    ### 为什么没有被用到? 什么作用:
-    ### 确实没有被用到, 作用是用于混合精度训练中的梯度缩放，以防止在使用 float16 精度时出现数值下溢的问题。
     scaler = torch.cuda.amp.GradScaler(enabled=True) if dtype == "float16" else None
 
     # compile the model
@@ -391,9 +402,6 @@ def main():
         print("compiling the model... (takes a ~minute)")
         unoptimized_model = model
         model = torch.compile(model)  # requires PyTorch 2.0
-
-    print(f"{yellow_color}Model has {sum(p.numel() for p in model.parameters()):,} parameters{reset_color}")
-    print(model)
 
     # + + + parallelize the model and wrap it with DDP using veScale APIs
     if ddp:
@@ -503,6 +511,8 @@ def main():
     local_iter_num = 0  # number of iterations in the lifetime of this process
     raw_model = model.module if ddp else model  # unwrap DDP container if needed
     running_mfu = -1.0
+
+
     while True:
         # determine and set the learning rate for this iteration
         lr = get_lr(iter_num) if decay_lr else learning_rate
@@ -587,6 +597,10 @@ def main():
     if ddp:
         barrier()
         destroy_process_group()
+
+    ### ndtimeline profiling done.
+    flush()
+    wait()
 
 
 if __name__ == "__main__":

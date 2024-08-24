@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# export VESCALE_DEBUG_MODE=1
+
 # Set the number of GPUs
 NUM_GPUS=4
 

@@ -56,4 +56,8 @@ sudo chmod 777 /data/xiaofengwu/vescale_prj/veScale/examples/nanogpt_4D_finetune
 ```
 This approach is less secure but allows anyone to edit the file.
 
+```bash
+sudo chmod -R 777 /path/to/folder
+```
+
 By implementing one of these solutions, you should be able to resolve the permission errors you're encountering when editing files outside of the Docker runtime.

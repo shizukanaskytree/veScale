@@ -1,5 +1,12 @@
 #!/bin/bash
 
+export OMP_NUM_THREADS=1
+# export NCCL_IB_DISABLE=0
+# export NCCL_ASYNC_ERROR_HANDLING=1
+
+# export NCCL_DEBUG=INFO
+# export NCCL_SOCKET_IFNAME=eth0
+
 # Set the number of GPUs
 NUM_GPUS=4
 
@@ -24,7 +31,7 @@ CHECKPOINT_DIR="./nanogpt_checkpoint_dir"
 torchrun \
   --standalone \
   --nproc_per_node=$NUM_GPUS \
-  finetune_4D.py \
+  finetune_4D_with_ndtimeline.py \
   config/finetune_shakespeare.py \
   --compile=False \
   --dp_size=$DP_SIZE \

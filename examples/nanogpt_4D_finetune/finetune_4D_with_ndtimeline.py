@@ -108,7 +108,7 @@
 #     return tracefunc
 # ################################################################################
 
-
+import sys
 import os
 import time
 import math
@@ -118,6 +118,7 @@ import inspect
 import numpy as np
 import torch
 from torch.distributed import broadcast, all_reduce, barrier, init_process_group, destroy_process_group, get_rank
+import torch.distributed as dist
 
 from model import GPTConfig, GPT
 from vescale.devicemesh_api import VESCALE_DEVICE_MESH
@@ -133,27 +134,9 @@ import vescale
 from vescale.dtensor.random import manual_seed
 
 from vescale.ndtimeline import init_ndtimers, flush, wait
+# from vescale.ndtimeline.handlers.local_timeline_handler import LocalTimelineNDHandler
 
-
-import torch.distributed as dist
-
-def get_rank_info():
-    if dist.is_initialized():
-        rank = dist.get_rank()
-        local_rank = int(os.environ.get('LOCAL_RANK', rank % torch.cuda.device_count()))
-        world_size = dist.get_world_size()
-        yellow_color = "\033[93m"
-        reset_color = "\033[00m"
-        print(f"{yellow_color}Rank: {rank}/{world_size-1}{reset_color}")
-        return rank, local_rank, world_size
-    else:
-        yellow_color = "\033[93m"
-        reset_color = "\033[00m"
-        print(f"{yellow_color}Distributed not initialized.{reset_color}")
-        return None, None, None
-
-
-### ?
+# -----------------------------------------------------------------------------
 # def debug_at_rank_n(rank_id):
 #     """If distributed is initialized, print only on rank n."""
 #     if torch.distributed.is_initialized():
@@ -217,8 +200,9 @@ dtype = (
 )  # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile = True  # use PyTorch 2.0 to compile the model to be faster
 use_DO = True
-dp_size = 4
-tp_size = 1
+dp_size = 2
+tp_size = 2
+pp_size = 1
 DDP_grads_in_fp32 = True
 save_checkpoint_path = "./nanogpt_checkpoint_dir"
 load_checkpoint_path = ""
@@ -229,13 +213,13 @@ config = {}
 
 
 def main():
-
-    # debug_at_rank_n(0)  # Example: Debug only at rank 0
+    # print(f"NCCL version: {torch.cuda.nccl.version()}")
 
     world_size = dp_size * tp_size
     local_batch_size = batch_size
 
-    wandb_run_name = f"{world_size}gpu-dp{dp_size}-tp{tp_size}"
+    wandb_run_name = f"{world_size}gpu-pp-{pp_size}-dp{dp_size}-tp{tp_size}"
+    print(f"running with {world_size} GPUs, local batch size = {local_batch_size}, run name = {wandb_run_name}")
 
     # various inits, derived attributes, I/O setup
     # ddp = world_size > 1
@@ -248,20 +232,40 @@ def main():
         world_size = int(os.environ["WORLD_SIZE"])
         rank = int(os.environ["RANK"])
 
+        device = f"cuda:{rank}"
+        torch.cuda.set_device(device)
+
+        ### original
+        init_process_group(backend=backend, world_size=world_size, rank=rank)
+
+
+        # + + + VeScale API below
+        # VESCALE_DEVICE_MESH.init_device_mesh(device, (dp_size, tp_size), mesh_dim_names=["DP", "TP"])
+        # mesh = VESCALE_DEVICE_MESH.get()
+        # + + + VeScale API above
+
+        # + + + VeScale API below
+        VESCALE_DEVICE_MESH.init_device_mesh(
+            device,
+            (pp_size, dp_size, tp_size),  # Ensure pp_size is defined
+            mesh_dim_names=["PP", "DP", "TP"]  # Include "PP" in the dimension names
+        )
+        mesh = VESCALE_DEVICE_MESH.get()
+        # + + + VeScale API above
+
+        ddp_rank = get_rank() // tp_size
+
         ### xxx profiling below xxx
         ### https://github.com/volcengine/veScale/blob/main/vescale/ndtimeline/README.md#how-to-use-ndtimeline
-        init_ndtimers(rank=int(rank), local_rank=int(rank), enable_streamer=True)
+        init_ndtimers(
+            rank=int(rank),
+            local_rank=int(rank),
+            enable_streamer=True,
+            # post_handler=LocalTimelineNDHandler()
+        )
         ### xxx profiling above xxx
 
 
-        device = f"cuda:{rank}"
-        torch.cuda.set_device(device)
-        init_process_group(backend=backend, world_size=world_size, rank=rank)
-        # + + + VeScale API below
-        VESCALE_DEVICE_MESH.init_device_mesh(device, (dp_size, tp_size), mesh_dim_names=["DP", "TP"])
-        mesh = VESCALE_DEVICE_MESH.get()
-        # + + + VeScale API above
-        ddp_rank = get_rank() // tp_size
     else:
         rank = 0
         ddp_rank = 0
@@ -280,26 +284,16 @@ def main():
     if master_process:
         os.makedirs(out_dir, exist_ok=True)
     torch.manual_seed(1337)
+
     # + + + VeScale API below
     manual_seed(1337, mesh)
     # + + + VeScale API above
+
     torch.backends.cuda.matmul.allow_tf32 = True  # allow tf32 on matmul
     torch.backends.cudnn.allow_tf32 = True  # allow tf32 on cudnn
     device_type = "cuda" if "cuda" in device else "cpu"  # for later use in torch.autocast
     # note: float16 data type will automatically use a GradScaler
     ptdtype = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[dtype]
-
-
-    # Get rank information
-    rank, local_rank, world_size = get_rank_info()
-
-    # Further processing depending on rank...
-    if rank is not None:
-        yellow_color = "\033[93m"
-        reset_color = "\033[00m"
-        print(f"{yellow_color}Process {rank} out of {world_size} is running.{reset_color}")
-
-
 
     # poor man's data loader
     data_dir = os.path.join("data", dataset)
@@ -310,7 +304,6 @@ def main():
     In particular, at each training iteration, each rank samples a batch of indices under the identical RNG state.
     Then, each Data Parallelism (DP) rank takes the corresponding subset of indices and fetches the corresponding sequences from the dataset.
     """
-
     def get_batch(split, bsz=batch_size, lbsz=local_batch_size):
         # We recreate np.memmap every batch to avoid a memory leak, as per
         # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
@@ -359,6 +352,7 @@ def main():
         vocab_size=None,
         dropout=dropout,
     )  # start with model_args from command line
+
     if init_from == "scratch":
         # init a new model from scratch
         print("Initializing a new model from scratch")
@@ -387,6 +381,7 @@ def main():
         model_args["vocab_size"] = meta_vocab_size if meta_vocab_size is not None else 50304
         gptconf = GPTConfig(**model_args)
         model = GPT(gptconf)
+
     # crop down the model block size if desired, using model surgery
     if block_size < model.config.block_size:
         model.crop_block_size(block_size)
@@ -500,11 +495,13 @@ def main():
         wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
     # Load checkpoint
+
     # + + + VeScale Load checkpoint
     if load_checkpoint_path:
         checkpoint_state = {"model": model, "optimizer": optimizer}
         vescale.checkpoint.load(load_checkpoint_path, checkpoint_state, broadcast_checkpoint=broadcast_checkpoint)
     # + + + VeScale API above
+
     # training loop
     X, Y = get_batch("train")  # fetch the very first batch
     t0 = time.time()
@@ -522,6 +519,7 @@ def main():
         # evaluate the loss on train/val sets and write checkpoints
         if iter_num % eval_interval == 0:
             losses = estimate_loss()
+
         if iter_num % eval_interval == 0:
             if master_process:
                 print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
@@ -535,6 +533,7 @@ def main():
                             "mfu": running_mfu * 100,  # convert to percentage
                         }
                     )
+
             if iter_num > 0:
                 # When iter_num == 0, the training does not start sotoptimizer state is empty,
                 # Don't save checkpoint
@@ -546,14 +545,17 @@ def main():
                     async_checkpoint=async_checkpoint,
                 )
                 # + + + VeScale API above
+
         if iter_num == 0 and eval_only:
             break
 
         # forward backward update, with optional gradient accumulation to simulate larger batch size
+
         # + + + VeScale API below
         if ddp:
             model.zero_grad_buffer()
         # + + + VeScale API above
+
         for micro_step in range(gradient_accumulation_steps):
             # with ctx:
             logits, loss = model(X, Y)
@@ -562,10 +564,12 @@ def main():
             X, Y = get_batch("train")
             # backward pass
             loss.backward()
+
         # + + + VeScale API below
         if ddp:
             model.finish_grad_sync()
         # + + + VeScale API above
+
         optimizer.step()
         # flush the gradients as soon as we can, no need for this memory anymore
         optimizer.zero_grad(set_to_none=True)
@@ -574,6 +578,7 @@ def main():
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
+
         # get loss as float. note: this is a CPU-GPU sync point
         # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
         if ddp:
@@ -581,12 +586,15 @@ def main():
             all_reduce(lossf)
         else:
             lossf = loss * gradient_accumulation_steps / world_size
+
         lossf = lossf.item()
+
         if iter_num % log_interval == 0 and master_process:
             if local_iter_num >= 5:  # let the training loop settle a bit
                 mfu = raw_model.estimate_mfu(local_batch_size * gradient_accumulation_steps, dt)
                 running_mfu = mfu if running_mfu == -1.0 else 0.9 * running_mfu + 0.1 * mfu
             print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+
         iter_num += 1
         local_iter_num += 1
 
@@ -594,13 +602,17 @@ def main():
         if iter_num > max_iters:
             break
 
+
+    ### ndtimeline profiling done.
+    ### Verify that there are no other operations or code paths that might cause the process group to be unintentionally
+    ### destroyed or reset after initialization. This could happen if, for example, there is a call to destroy_process_group()
+    ### somewhere in your code before the barrier().
+    flush()
+    wait()
+
     if ddp:
         barrier()
         destroy_process_group()
-
-    ### ndtimeline profiling done.
-    flush()
-    wait()
 
 
 if __name__ == "__main__":

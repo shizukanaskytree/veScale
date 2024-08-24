@@ -22,6 +22,9 @@
 # Modification Copyright 2023 ByteDance Ltd. and/or its affiliates.
 ################################################################################
 
+
+### override the default config with the following changes:
+
 out_dir = "out-shakespeare"
 eval_interval = 5
 eval_iters = 5
@@ -38,9 +41,9 @@ always_save_checkpoint = False
 # the number of examples per iter:
 # 4 batch_size * 8 grad_accum * 1024 tokens = 32,768 tokens/iter
 # shakespeare has 301,966 tokens, so 1 epoch ~= 9.2 iters
-batch_size = 32
+batch_size = 4 # 32
 gradient_accumulation_steps = 1
-max_iters = 20
+max_iters = 10
 
 # finetune at constant LR
 learning_rate = 3e-5

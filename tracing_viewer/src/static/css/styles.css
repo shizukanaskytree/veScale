@@ -1,0 +1,57 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+.log-entry {
+    padding: 10px;  /* Increased padding for better spacing */
+    border: 1px solid #ddd;
+    background-color: #f9f9f9;
+    margin-bottom: 5px;
+    cursor: default;  /* Changed from pointer to default since clicking expands code, not a link */
+    transition: background-color 0.3s ease;  /* Added smooth transition for hover effect */
+}
+
+.log-entry:hover {
+    background-color: #e9e9e9;
+}
+
+.code-snippet {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    white-space: pre-wrap;
+    font-family: monospace;
+    display: none;  /* Ensure it's hidden by default */
+}
+
+.show-code-btn {
+    margin-left: 10px;  /* Adds some space between the function description and the button */
+    padding: 5px 10px;  /* Added padding for better click area */
+    border: none;  /* Removed default button border */
+    background-color: #f0f0f0;  /* Light background to distinguish button */
+    cursor: pointer;
+    transition: background-color 0.3s ease;  /* Smooth transition for hover effect */
+    font-size: 14px;
+}
+
+.show-code-btn:hover {
+    background-color: #ddd;
+}
+
+#code-container {
+    margin-top: 20px;
+}
+
+#code-snippet {
+    white-space: pre-wrap;
+    background-color: #f4f4f4;
+    padding: 10px;
+    border: 1px solid #ccc;
+}

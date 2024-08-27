@@ -316,7 +316,7 @@ class DModule:
             input_sharding_plan = module.get_fwd_plan(submod_path + ".input")
             if input_sharding_plan:
                 submod.register_forward_pre_hook(
-                    PreHookInput.get_hook(module._device_mesh, input_sharding_plan),
+                    PreHookInput.get_hook(module._device_mesh, input_sharding_plan), # def _hook, vescale/dmodule/_hook.py
                     with_kwargs=True,
                 )
 

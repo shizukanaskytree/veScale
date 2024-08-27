@@ -23,8 +23,14 @@ TP_SIZE=2
 CHECKPOINT_DIR="./nanogpt_checkpoint_dir"
 
 # Run the finetuning process with the specified parallelism sizes
-torchrun --standalone --nproc_per_node=$NUM_GPUS finetune_4D.py config/finetune_shakespeare.py \
-  --compile=False --dp_size=$DP_SIZE --tp_size=$TP_SIZE \
+torchrun \
+  --standalone \
+  --nproc_per_node=$NUM_GPUS \
+  finetune_4D.py \
+  config/finetune_shakespeare.py \
+  --compile=False \
+  --dp_size=$DP_SIZE \
+  --tp_size=$TP_SIZE \
   --save_checkpoint_path=$CHECKPOINT_DIR
 
 # To resume training from a checkpoint, add --load_checkpoint_path

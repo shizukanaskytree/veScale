@@ -18,7 +18,10 @@ NCCL_SHM_DISABLE="1"
 NCCL_P2P_DISABLE="1"
 NCCL_IB_DISABLE="1"
 
+#######################################
 # Check if the container already exists
+#######################################
+
 if [ "$(docker ps -a -q -f name=${CONTAINER_NAME})" ]; then
     echo "Container with name ${CONTAINER_NAME} already exists."
     echo "Starting and attaching to the existing container..."
@@ -32,9 +35,10 @@ else
 
     # Run a new Docker container with the specified volume mapping and name, and set shm-size to 16GB
 
+    ### issue: -u $(id -u):$(id -g) \
     docker run -it --gpus all --shm-size=16g --ulimit memlock=-1:-1 \
         -v ${LOCAL_PATH}:${DOCKER_RUNTIME_PATH} \
-        -u $(id -u):$(id -g) \
+        -p 8080:8080 \
         --name ${CONTAINER_NAME} \
         --env NCCL_DEBUG=${NCCL_DEBUG} \
         --env NCCL_SHM_DISABLE=${NCCL_SHM_DISABLE} \

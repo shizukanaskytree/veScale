@@ -4,7 +4,7 @@
     padding: 0;
     margin: 0;
     box-sizing: border-box;
-    overflow: hidden; /* Ensure the content doesn't overflow */
+    overflow: hidden;
 }
 
 .treeview {
@@ -12,18 +12,39 @@
     border-right: 1px solid #ccc;
     overflow-y: auto;
     padding: 10px;
-    font-size: 10px; /* Smaller font size for the treeview */
+    font-size: 10px;
 }
 
 .codeview {
     width: 50%;
     padding: 10px;
-    overflow-y: auto;
-    white-space: pre-wrap; /* Ensure that code lines break if too long */
-    background-color: #f5f5f5; /* Light gray background for code view */
-    font-family: 'Courier New', Courier, monospace; /* Monospace font for code */
+    overflow-y: hidden; /* Hide overflow to manage two separate code views */
+    background-color: #f5f5f5;
+    font-family: 'Courier New', Courier, monospace;
     border-left: 1px solid #ccc;
-    font-size: 12px; /* Adjust the font size as needed */
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+}
+
+#code-view-container {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+.code-display {
+    overflow-y: auto;
+    padding: 10px;
+    flex-grow: 1;
+    white-space: pre-wrap;
+    background-color: #fff;
+}
+
+.horizontal-divider {
+    height: 5px;
+    background-color: #ccc;
+    cursor: row-resize;
 }
 
 .divider {
@@ -35,23 +56,23 @@
 
 ul {
     list-style-type: none;
-    padding-left: 10px; /* More compact with 2-space indent equivalent */
+    padding-left: 10px;
 }
 
 li {
     display: block;
     margin: 3px 0;
     padding: 2px;
-    border-left: 2px solid #007bff; /* Adds a left border to indicate depth */
-    font-family: monospace; /* Use monospace font for better readability */
-    font-size: 10px; /* Smaller font size for list items */
+    border-left: 2px solid #007bff;
+    font-family: monospace;
+    font-size: 10px;
 }
 
 li .function-name {
     display: inline-block;
     margin-right: 8px;
     font-weight: bold;
-    font-size: 10px; /* Smaller font size for function names */
+    font-size: 10px;
 }
 
 button.display-code {
@@ -62,7 +83,7 @@ button.display-code {
     cursor: pointer;
     border-radius: 3px;
     margin-left: 5px;
-    font-size: 10px; /* Smaller font size for buttons */
+    font-size: 10px;
 }
 
 button.display-code:hover {
@@ -70,7 +91,7 @@ button.display-code:hover {
 }
 
 .treeview ul ul {
-    margin-left: 10px; /* More compact for nested levels */
+    margin-left: 10px;
 }
 
 /* Optional: Styles for Prism.js syntax highlighting */
@@ -86,7 +107,7 @@ pre.line-numbers {
     top: 0;
     font-size: 100%;
     left: 0;
-    width: 3em; /* width of the gutter */
+    width: 3em;
     user-select: none;
     text-align: right;
     padding-right: 0.6em;
@@ -94,9 +115,8 @@ pre.line-numbers {
     font-size: 14px;
 }
 
-/* Optional: Adjustments for highlighted code */
 code[class*="language-"], pre[class*="language-"] {
-    color: #393A34; /* Darker text color */
+    color: #393A34;
     background: none;
     text-shadow: 0 1px white;
     font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
@@ -169,6 +189,7 @@ code[class*="language-"], pre[class*="language-"] {
 .token.bold {
     font-weight: bold;
 }
+
 .token.italic {
     font-style: italic;
 }

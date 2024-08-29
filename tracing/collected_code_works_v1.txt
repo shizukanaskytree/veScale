@@ -395,11 +395,18 @@ document.addEventListener('DOMContentLoaded', function () {
         li.dataset.endLineNumber = nodeData.end_line_number;
         li.title = `${nodeData.function_name} in ${nodeData.file_path}:${nodeData.start_line_number}-${nodeData.end_line_number || '...'}`;
 
+        // Initialize counter
+        let clickCount = 1;
+
         const displayCodeButton = document.createElement('button');
         displayCodeButton.textContent = '🐣';
         displayCodeButton.classList.add('display-code');
         displayCodeButton.addEventListener('click', function(event) {
             event.stopPropagation();
+
+            // Replace the emoji with the counter and increment it on each click
+            displayCodeButton.textContent = clickCount;
+            clickCount += 1;
 
             // Fetch the code snippet using the API
             fetch(`/get_function_code?file_path=${encodeURIComponent(li.dataset.filePath)}&start_line_number=${li.dataset.startLineNumber}&end_line_number=${li.dataset.endLineNumber}`)

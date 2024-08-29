@@ -1,23 +1,26 @@
 document.addEventListener('DOMContentLoaded', function () {
-    const divider = document.getElementById('dragMe');
-    const leftPanel = divider.previousElementSibling;
-    const rightPanel = divider.nextElementSibling;
+    const horizontalDivider = document.getElementById('dragMeHorizontal');
+    const upperPanel = horizontalDivider.previousElementSibling;
+    const lowerPanel = horizontalDivider.nextElementSibling;
 
-    let isDragging = false;
+    let isDraggingHorizontal = false;
 
-    divider.addEventListener('mousedown', function (e) {
-        isDragging = true;
+    horizontalDivider.addEventListener('mousedown', function (e) {
+        isDraggingHorizontal = true;
     });
 
     document.addEventListener('mousemove', function (e) {
-        if (!isDragging) return;
+        if (!isDraggingHorizontal) return;
 
-        const offsetRight = document.body.clientWidth - e.clientX;
-        leftPanel.style.width = `${e.clientX}px`;
-        rightPanel.style.width = `${offsetRight}px`;
+        const containerRect = upperPanel.parentElement.getBoundingClientRect();
+        const upperPanelHeight = e.clientY - containerRect.top;
+        const lowerPanelHeight = containerRect.bottom - e.clientY;
+
+        upperPanel.style.height = `${upperPanelHeight}px`;
+        lowerPanel.style.height = `${lowerPanelHeight}px`;
     });
 
     document.addEventListener('mouseup', function () {
-        isDragging = false;
+        isDraggingHorizontal = false;
     });
 });

@@ -18,7 +18,7 @@
 .codeview {
     width: 50%;
     padding: 10px;
-    overflow-y: hidden; /* Hide overflow to manage two separate code views */
+    overflow: hidden; /* Hide overflow to manage two separate code views */
     background-color: #f5f5f5;
     font-family: 'Courier New', Courier, monospace;
     border-left: 1px solid #ccc;
@@ -31,14 +31,17 @@
     display: flex;
     flex-direction: column;
     flex-grow: 1;
+    overflow: hidden; /* Prevent overflow of the entire container */
 }
 
 .code-display {
-    overflow-y: auto;
+    overflow-y: auto;  /* Ensure scrollbars are added */
     padding: 10px;
     flex-grow: 1;
     white-space: pre-wrap;
     background-color: #fff;
+    border: 1px solid #ddd;
+    max-height: 100%; /* Ensures the code-display does not grow beyond its container */
 }
 
 .horizontal-divider {

@@ -531,6 +531,12 @@ class PipelineScheduleTest(DTensorTestBase):
         Tests zero-bubble pipeline schedule with profiling.
         """
 
+        """
+        这段代码测试了在分布式深度学习环境中使用零气泡（zero-bubble）管道调度策略的正确性。
+        它通过对一个多层感知机（MLP）模型进行前向和反向传播计算，验证分布式调度的损失值与单机计算结果的一致性。
+        最后，代码在执行完成后进行全局同步并清理计时器。
+        """
+
         # ############################################################################
         # ### Open the file to save the trace output
 
@@ -587,6 +593,7 @@ class PipelineScheduleTest(DTensorTestBase):
             model.mlps[i] = model.mlps[i].cuda()
         all_batches_out = []
         if self.rank == 0:
+            ### 获得单机下的 ground truth
             true_model = model
             for i in range(8):
                 true_model.mlps[i] = true_model.mlps[i].cuda(0)
@@ -602,6 +609,8 @@ class PipelineScheduleTest(DTensorTestBase):
                 for idx, output in enumerate(all_output_x):
                     print(f"mlp{idx}.grad is {output.grad}")
                 print(" ====================================== ")
+
+        ### 获得分布式调度的损失值
         fwd_plan = {
             ".input": [[Replicate()]],
             ".output": [[Replicate()]],
@@ -646,6 +655,8 @@ class PipelineScheduleTest(DTensorTestBase):
             max_mem=mem_f * 4 * 2,
         )
         _, all_forward = ScheduleEngine.execute(pipe_engine)
+
+        ### 验证分布式调度的损失值与单机计算结果的一致性
         if self.rank == 0:
             loss_per_microbatch = [item[1] for item in all_forward]
             print(loss_per_microbatch, all_batches_out)

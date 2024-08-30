@@ -17,7 +17,7 @@ torchrun --nproc_per_node=4 test/parallel/pipeline/instruction/test_schedule.py
 # These are typically used to profile and debug the performance of distributed training across different devices and stages in a parallelized deep learning model.
 
 ### zero bubble, ndtimeline
-torchrun --nproc_per_node=4 test/parallel/pipeline/instruction/test_schedule.py -k test_zerobubble_engine
+torchrun --nproc_per_node=1 test/parallel/pipeline/instruction/test_schedule.py -k test_zerobubble_engine
 
 ### ndtimeline
 torchrun --nproc_per_node=4 test/parallel/pipeline/instruction/test_schedule.py -k test_runtime_engine_with_profiling

@@ -99,29 +99,69 @@ class VeDeviceMesh:
             >>> VESCALE_DEVICE_MESH.init_device_mesh("cuda", mesh_shape=(2, 8), mesh_dim_names=("dp", "tp"))
 
         Limitation: we currently only support fixed sized DeviceMesh with 1 to 3 dimensions. We will loosen this constraint in future.
+
+        =====================================
+        根据设备网格的形状来匹配数据并行维度的进程组
+        =====================================
+
+        _GLOBAL_MESH, _DATA_PARALLEL_SIZE, _GLOBAL_TENSOR_PARALLEL_MESHES, 和
+        _GLOBAL_PIPELINE_MODEL_PARALLEL_MESHES 之间的关系如下：
+
+        _GLOBAL_MESH:
+            这是全局的 DeviceMesh 对象，表示整个设备网格的结构。
+            在 VeDeviceMesh.init_device_mesh 方法中初始化。
+            其他属性和方法依赖于 _GLOBAL_MESH 的存在。
+
+        _DATA_PARALLEL_SIZE:
+            表示数据并行维度的大小。
+            在 VeDeviceMesh.init_device_mesh 方法中根据 mesh_shape 初始化。
+            用于数据并行相关的计算和操作。
+
+        _GLOBAL_TENSOR_PARALLEL_MESHES:
+            这是一个 DeviceMesh 对象的列表，表示全局张量并行子网格。
+            在 VeDeviceMesh.get_global_tensor_parallel_meshes 方法中初始化。
+            依赖于 _GLOBAL_MESH 和 _MESH_DIM_NAMES_LOOKUP 的存在。
+
+        _GLOBAL_PIPELINE_MODEL_PARALLEL_MESHES:
+            这是一个 DeviceMesh 对象的列表，表示全局流水线并行子网格。
+            在 VeDeviceMesh.get_global_pipeline_parallel_meshes 方法中初始化。
+            依赖于 _GLOBAL_MESH 的存在。
+
+        这些属性之间的关系可以总结为：_GLOBAL_MESH 是核心的设备网格对象，其他属性如
+        _DATA_PARALLEL_SIZE、_GLOBAL_TENSOR_PARALLEL_MESHES 和 _GLOBAL_PIPELINE_MODEL_PARALLEL_MESHES
+        都依赖于 _GLOBAL_MESH 的初始化和存在，并且用于不同的并行计算维度和子网格的管理。
         """
         if device_type.startswith("cuda") and device_type != "cuda":
             warnings.warn("'cuda:<rank>' is invalid ! Convert to pure 'cuda'!")
             device_type = "cuda"
         assert device_type in ("cuda", "cpu", "meta"), "Supports only three device types: cuda, cpu, meta!"
+
         if self._GLOBAL_MESH is None or not check_uniqueness:
             self._TENSOR_PARALLEL_SIZE = self._DATA_PARALLEL_SIZE = self._PIPELINE_PARALLEL_SIZE = None
+
             self._MESH_DIM_NAMES_MAPPING = {}
+
             if mesh_dim_names is None:
                 # Support two default sets of default mesh dimensions: 2-dim [dp, tp], and 3-dim [pp, dp, tp]
                 mesh_dim_names = ["PP", "DP", "TP"][-len(mesh_shape) :]
+
             if device_type is None:
                 device_type = "cuda"
+
             self._GLOBAL_MESH = init_device_mesh(device_type, mesh_shape, mesh_dim_names=mesh_dim_names)
+
             self._MESH_GRIDS = self._GLOBAL_MESH.mesh.clone().detach().cpu()
+
             if len(mesh_shape) == 3:
                 self._PIPELINE_PARALLEL_SIZE, self._DATA_PARALLEL_SIZE, self._TENSOR_PARALLEL_SIZE = mesh_shape
             elif len(mesh_shape) == 2:
                 self._DATA_PARALLEL_SIZE, self._TENSOR_PARALLEL_SIZE = mesh_shape
             else:
                 self._DATA_PARALLEL_SIZE = self._TENSOR_PARALLEL_SIZE = mesh_shape[0]
+
             for idx, name in enumerate(mesh_dim_names[::-1]):
                 self._MESH_DIM_NAMES_MAPPING[idx] = name
+
             self._MESH_DIM_NAMES_LOOKUP = list(self._MESH_DIM_NAMES_MAPPING.values())[::-1]
             self._RANK_COORDINATE = None
             self._GLOBAL_PIPELINE_MODEL_PARALLEL_MESHES = None

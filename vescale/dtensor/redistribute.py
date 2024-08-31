@@ -454,6 +454,58 @@ def redistribute_local_tensor(
 
 
 class Redistribute(torch.autograd.Function):
+    """
+    The Redistribute class in vescale/dtensor/redistribute.py is a custom PyTorch
+    autograd function that helps in redistributing a distributed tensor (DTensor)
+    across different devices or placements. This is useful in distributed computing
+    where tensors need to be moved or reshaped across multiple devices for efficient
+    computation.
+
+    How It Works
+
+    Forward Pass:
+        The forward method takes an input tensor and redistributes it according to the specified device_mesh and placements.
+        If the current placements of the tensor are the same as the target placements, it simply returns the original tensor.
+        Otherwise, it calls the redistribute_local_tensor function to perform the redistribution.
+
+    Backward Pass:
+        The backward method handles the gradient computation for the redistributed tensor.
+        It ensures that the gradients are correctly redistributed back to the original placements.
+
+    Simple Real Example
+        Imagine you have a tensor that is split across two GPUs (GPU0 and GPU1).
+        Initially, the tensor is fully stored on GPU0, but you want to redistribute
+        it so that half of the tensor is on GPU0 and the other half is on GPU1.
+
+        ```py
+        import torch
+        from vescale.dtensor.redistribute import Redistribute
+
+        # Example tensor on GPU0
+        input_tensor = torch.tensor([1, 2, 3, 4], device='cuda:0')
+
+        # Define the device mesh (2 GPUs)
+        device_mesh = DeviceMesh([torch.device('cuda:0'), torch.device('cuda:1')])
+
+        # Define the target placements (split across GPUs)
+        placements = (Shard(0), Shard(1))
+
+        # Redistribute the tensor
+        redistributed_tensor = Redistribute.apply(input_tensor, device_mesh, placements)
+
+        print(redistributed_tensor)
+        ```
+
+    In this example:
+    - input_tensor is initially on GPU0.
+    - device_mesh specifies that we have two GPUs.
+    - placements specifies that we want to split the tensor across the two GPUs.
+    - Redistribute.apply redistributes the tensor according to the specified placements.
+
+    The Redistribute class handles the complexity of moving and reshaping the tensor
+    across different devices, making it easier to work with distributed tensors in PyTorch.
+    """
+
     @staticmethod
     def forward(  # type: ignore[override]
         # pyre-fixme[2]: Parameter must be annotated.

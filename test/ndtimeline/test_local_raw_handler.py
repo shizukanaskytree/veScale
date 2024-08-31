@@ -22,7 +22,15 @@ from vescale.ndtimeline.variables import LOCAL_LOGGING_PATH
 
 
 def test_basic_usage():
+    ### run_id: represents an identifier for a specific run or instance of the handler. It is set to 0 in this case.
+    ### chunk_sz: stands for "chunk size" and indicates the size of data chunks that the handler will process. It is set to 10 in this case.
+    ###           chunk_sz 控制日志文件的最大大小，当日志文件超过这个大小时，会自动进行日志轮转。
+    ###           chunk_sz 参数用于控制日志文件的最大大小（以字节为单位）。在 LocalRawNDHandler 类中，
+    ###           它被传递给 RotatingFileHandler 的 maxBytes 参数。如果日志文件的大小超过 chunk_sz，则会创建一个新的日志文件，
+    ###           并根据 backup_cnt 参数保留一定数量的备份日志文件。
+    ### backup_cnt: represents the number of backups to maintain. It is set to 3 in this case.
     h = LocalRawNDHandler(run_id=0, chunk_sz=10, backup_cnt=3)
+
     file_name = "timeline_run0_raw.log"
     h("test_metric", 1.0, [1.0], [1.0], [{}], range(0, 1), WorldInfo(0, 0), {})
     assert os.path.exists(os.path.join(LOCAL_LOGGING_PATH, file_name))

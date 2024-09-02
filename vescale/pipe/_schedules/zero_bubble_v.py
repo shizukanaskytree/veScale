@@ -22,6 +22,7 @@ from inspect import signature
 import contextlib
 
 import torch
+import torch.distributed as dist
 
 from vescale.pipe._schedules.instruction_base import (
     InstructionGenerator,
@@ -50,8 +51,39 @@ from vescale.dtensor._utils import compute_global_tensor_info
 from torch.distributed.distributed_c10d import _get_default_group
 
 import logging
+from snoop import spy
 
 logger = logging.getLogger(__file__)
+
+################################################################################
+import os
+import sys
+import socket
+import snoop
+
+import datetime
+### Get the absolute path of the current file
+current_file_path = os.path.abspath(__file__)
+### Extract the file name without the extension
+file_name = os.path.splitext(os.path.basename(current_file_path))[0]
+### Extract the file extension without the dot
+file_extension = os.path.splitext(os.path.basename(current_file_path))[1][1:]
+### use different folders for a multiprocess program
+hostname = socket.gethostname()
+process_id = os.getpid()
+### Create a folder path by joining the directory of the current file with a new folder name
+### The new folder name includes 'logs-', the file name, and the file extension
+# log_folder = os.path.join(os.path.dirname(current_file_path), 'logs-' + file_name + '-' + file_extension)
+# log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-pid_{process_id}-{file_extension}')
+log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
+### Create the directory for the log folder if it doesn't already exist
+os.makedirs(log_folder, exist_ok=True)
+### Generate a timestamp in the format YYYYMMDD_HHMMSS
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+from snoop import spy  # not required if you use install()
+snoop.install(out=os.path.join(log_folder, f"funcname-{timestamp}.log"))
+################################################################################
 
 
 def maybe_tensor(tensor):
@@ -216,6 +248,7 @@ class CostGraph:
             cat * 2 * self.n_stage * self.n_micro + chunk * self.n_stage * self.n_micro + stage * self.n_micro + micro
         )
 
+    @spy(depth=2, watch_explode=['self'])
     def try_v_schedule(self, fill_f=True, fill_b=True, approved_bubble=None):
         count = []
         for i in range(self.n_stage):
@@ -233,6 +266,7 @@ class CostGraph:
             approved_bubble = [-1] * self.n_stage
         max_approved_bubble = max(approved_bubble)
 
+        # @spy
         def get_max_stage_bubble(stage=-1):
             max_stage_bubble = 0
             for bb in stage_bubble:
@@ -241,12 +275,21 @@ class CostGraph:
                 max_stage_bubble = max(max_stage_bubble, max_approved_bubble - approved_bubble[stage])
             return max_stage_bubble
 
+        # @spy
         def put_w(stage):
             assert len(pending_w[stage]) > 0
             _, chunk_, _ = pending_w[stage].popleft()
             put(2, chunk_, stage)
 
+        # @spy
         def put(cat, chunk, stage, assert_cnt=True):
+            """
+            cat: category or type of operation being scheduled. 0: F, 1: B, 2: W
+            chunk: macrobatch 数据切块
+            stage: 模型切块
+            """
+            print(f"rank: {dist.get_rank() if dist.is_initialized() else 0}, cat: {cat}, chunk: {chunk}, stage: {stage}")
+
             _tmp = _no_bubble = cur_time[stage] + self.fbw_cost[cat]
             _cnt = count[stage][cat * 2 + chunk]
             if _cnt >= self.n_micro:
@@ -452,6 +495,7 @@ class CostGraph:
                 _str += _c
             print(_str)
 
+    # @spy(watch_explode=['self'])
     def get_v_schedule(self, only_run_time=False):
         schedule, end_time, max_bubble = None, None, None
         expected_time = sum(self.fbw_cost) * self.n_micro * 2
@@ -813,6 +857,10 @@ def vescale_zbv_forward():
     chunk_id = inst.chunk
     stage_id = inst.stage
     mbx = inst.minibatch
+
+    # print yellow color
+    # print(f"\033[33m[vescale_zbv_forward], len of builder.model: {len(builder.model)}, chunk_id: {chunk_id}, stage_id: {stage_id}, mbx: {mbx}\033[0m")
+
     cur_model = builder.model[chunk_id]
 
     user_data = builder.user_data

@@ -20,5 +20,5 @@ torchrun --nproc_per_node=4 test/parallel/pipeline/instruction/test_schedule.py
 torchrun --nproc_per_node=1 test/parallel/pipeline/instruction/test_schedule.py -k test_zerobubble_engine
 
 ### ndtimeline
-torchrun --nproc_per_node=4 test/parallel/pipeline/instruction/test_schedule.py -k test_runtime_engine_with_profiling
+torchrun --nproc_per_node=1 test/parallel/pipeline/instruction/test_schedule.py -k test_runtime_engine_with_profiling
 

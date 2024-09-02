@@ -181,12 +181,12 @@ class DTensorTestBase(MultiProcessTestCase):
                 world_size=self.world_size,
                 rank=self.rank,  # pyre-ignore[16]
                 init_method=f"file://{self.file_name}",  # pyre-ignore[16]
-                # timeout=datetime.timedelta(seconds=1200),
-                timeout=None,
+                timeout=datetime.timedelta(seconds=1200),
+                # timeout=None, # not working
             )
 
             print(f"self.world_size: {self.world_size}")
-            self.debug_at_rank_n(0)
+            # self.debug_at_rank_n(0)
 
         # set device for nccl pg for collectives
         if "nccl" in self.backend:

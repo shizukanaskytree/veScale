@@ -1,7 +1,5 @@
 # import debugpy; debugpy.listen(5678); debugpy.wait_for_client(); debugpy.breakpoint()
-
 import re
-import ast
 import os
 
 class CallContext:
@@ -79,9 +77,10 @@ class LogParser:
             log_lines = file.readlines()
 
         current_line = None
+        i = 0
 
-        for line in log_lines:
-            stripped_line = line.strip()
+        while i < len(log_lines):
+            stripped_line = log_lines[i].strip()
 
             # Function call identification
             if ">>> Call to" in stripped_line:
@@ -90,15 +89,54 @@ class LogParser:
                     function_name = call_match.group(1)
                     file_path = call_match.group(2)
                     line_number = int(call_match.group(3))
+
+                    # Push the current context before switching to the new one
                     self.execution_tracker.push_context(file_path, function_name, line_number, {})
-                    self.parsed_steps.append({
+
+                    current_line = {
                         'step_type': 'function_call',
                         'function_name': function_name,
                         'file_path': file_path,
                         'line_number': line_number,
                         'variables': []
-                    })
+                    }
+
+                    # Append parsed function call with variables
+                    self.parsed_steps.append(current_line)
+
+                i += 1
+
+                ### Parse function arguments (following lines)
+                if call_match:
+                    variables_for_call = []
+                    while i < len(log_lines):
+
+                        ### break if the next line is a code line
+                        code_line_match = re.match(r"(\d{2}:\d{2}:\d{2}\.\d{2})\s+(\d+)\s+\|\s+(.*)", log_lines[i].strip())
+                        if code_line_match:
+                            break
+
+                        var_match = re.match(r"(\d{2}:\d{2}:\d{2}\.\d{2})\s*\.*\s*(\S+)\s*=\s*(.*)", log_lines[i].strip())
+                        if var_match:
+                            var_timestamp = var_match.group(1)
+                            variable_name = var_match.group(2)
+                            variable_value = var_match.group(3)
+                            variables_for_call.append({variable_name: variable_value})
+
+                        i += 1
+
+                    ### if we match at least one variable, store them
+                    if variables_for_call:
+                        # Store variables in the current context
+                        for variable in variables_for_call:
+                            self.execution_tracker.store_variable(current_line['line_number'], variable)
+
+                        # Update parsed_steps with all variables for immediate display
+                        current_line['variables'].extend(variables_for_call)
+                        self.write_log_file(current_line)
+
                 continue
+
 
             # Code line tracking
             code_line_match = re.match(r"(\d{2}:\d{2}:\d{2}\.\d{2})\s+(\d+)\s+\|\s+(.*)", stripped_line)
@@ -114,22 +152,35 @@ class LogParser:
                     'variables': []
                 }
                 self.parsed_steps.append(current_line)
-                self.write_log_file(current_line)
+                i += 1
                 continue
 
-            # Variable assignments
-            variable_line_match = re.match(r"(\d{2}:\d{2}:\d{2}\.\d{2})\s*\.*\s*(\S+)\s*=\s*(.*)", stripped_line)
-            if variable_line_match:
-                var_timestamp = variable_line_match.group(1)
-                variable_name = variable_line_match.group(2)
-                variable_value = variable_line_match.group(3)
-                if current_line:
-                    # Store the variables incrementally for this line number
-                    self.execution_tracker.store_variable(current_line['line_number'], {variable_name: variable_value})
+            # Variable assignments: Collect all variables until no more are found
+            variables_for_line = []
+            while i < len(log_lines):
+                variable_line_match = re.match(r"(\d{2}:\d{2}:\d{2}\.\d{2})\s*\.*\s*(\S+)\s*=\s*(.*)", log_lines[i].strip())
+                if variable_line_match:
+                    var_timestamp = variable_line_match.group(1)
+                    variable_name = variable_line_match.group(2)
+                    variable_value = variable_line_match.group(3)
+                    if current_line:
+                        # Store variable to be appended together
+                        variables_for_line.append({variable_name: variable_value})
+                    i += 1
+                else:
+                    break
 
-                    # Update parsed_steps with new variables for immediate display
-                    current_line['variables'].append({variable_name: variable_value})
-                    self.write_log_file(current_line)
+            if variables_for_line:
+                # Append multiple variables for this line at once
+                for variable in variables_for_line:
+                    self.execution_tracker.store_variable(current_line['line_number'], variable)
+
+                # Update parsed_steps with all variables for immediate display
+                current_line['variables'].extend(variables_for_line)
+                self.write_log_file(current_line)
+
+            else:
+                i += 1  # Ensure `i` is incremented if no variable match is found
 
             # Return statement handling
             if "<<< Return value from" in stripped_line:
@@ -161,14 +212,6 @@ class LogParser:
         if current_context:
             self.parsed_steps[-1]['file_path'] = current_context.file_path
 
-    def get_next_step(self):
-        # Advance to the next step in the parsed output
-        self.current_step += 1
-        if self.current_step < len(self.parsed_steps):
-            return self.parsed_steps[self.current_step]
-        else:
-            return None
-
     def write_log_file(self, step):
         current_context = self.execution_tracker.get_current_context()
         step_index = len(os.listdir(self.output_dir)) + 1
@@ -187,14 +230,22 @@ class LogParser:
                     else:
                         log_file.write(f"   {line_no:4d}: {line_content}\n")
 
-                    # Insert preserved and new variables for all executed lines up to now
+                    # Insert preserved and new variables for the executed line
                     all_vars_for_this_line = self.execution_tracker.get_variables_for_line(line_no)
                     if all_vars_for_this_line:
                         log_file.write("            -----\n")
+                        variable_strings = []
                         for vars_at_step in all_vars_for_this_line:
                             for name, value in vars_at_step.items():
-                                log_file.write(f"            {name} = {value}\n")
+                                variable_strings.append(f"            {name} = {value}")
+                                if isinstance(value, (list, dict)):
+                                    variable_strings.append(f"            len({name}) = {len(value)}")
+
+                        log_file.write("\n".join(variable_strings) + "\n")
+                        # Add separator between variables
+                        # log_file.write("\n---\n".join(variable_strings) + "\n")
                         log_file.write("            -----\n")
+
                 log_file.write("=" * 80 + '\n')
 
             # Write return statement
@@ -203,43 +254,17 @@ class LogParser:
                 log_file.write("=" * 80 + '\n')
 
 
-"""
-To ensure that extract_function_from_file_with_line_numbers preserves all code,
-including comments and empty lines, we need to avoid relying on ast.parse() and
-ast.unparse(), as they do not retain comments or blank lines. Instead, we should
-extract the function’s code directly by reading the source code as plain text and
-identifying the function boundaries using line numbers.
-"""
-# def extract_function_from_file_with_line_numbers(file_path, line_number):
-#     with open(file_path, 'r') as file:
-#         source = file.read()
-
-#     # Parse the source code into an AST
-#     tree = ast.parse(source)
-
-#     # Extract all function definitions
-#     functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-
-#     for func in functions:
-#         if func.lineno <= line_number < (func.end_lineno if hasattr(func, 'end_lineno') else float('inf')):
-#             function_code = ast.unparse(func)
-#             return function_code, func.lineno
-
-#     return None, None
-
-
 def extract_function_from_file_with_line_numbers(file_path, line_number):
     with open(file_path, 'r') as file:
         source_lines = file.readlines()
 
-    # Start searching for the function starting at the provided line_number
     func_start = None
     func_end = None
     indent_level = None
     for i, line in enumerate(source_lines):
-        if i + 1 == line_number and 'def ' in line:  # Start of the function
+        if i + 1 == line_number and 'def ' in line:
             func_start = i
-            indent_level = len(line) - len(line.lstrip())  # Track the indentation level of the function
+            indent_level = len(line) - len(line.lstrip())
             break
 
     if func_start is None:
@@ -249,11 +274,10 @@ def extract_function_from_file_with_line_numbers(file_path, line_number):
     for i, line in enumerate(source_lines[func_start + 1:], start=func_start + 1):
         current_indent = len(line) - len(line.lstrip())
         if current_indent <= indent_level and line.strip() and not line.lstrip().startswith('#'):
-            # Function ends when we encounter a line with less or equal indentation
             func_end = i
             break
 
-    # If no function end found, assume it goes till the end of the file
+    # If no function end is found, assume it goes till the end of the file
     if func_end is None:
         func_end = len(source_lines)
 
@@ -264,7 +288,6 @@ def extract_function_from_file_with_line_numbers(file_path, line_number):
 
 
 if __name__ == "__main__":
-    # Test with the sample.log file
     log_file_path = './logs/sample.log'
     output_dir = './logs/steps'
 

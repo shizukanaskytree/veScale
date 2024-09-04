@@ -212,6 +212,46 @@ class LogParser:
         if current_context:
             self.parsed_steps[-1]['file_path'] = current_context.file_path
 
+    # def write_log_file(self, step):
+    #     current_context = self.execution_tracker.get_current_context()
+    #     step_index = len(os.listdir(self.output_dir)) + 1
+    #     file_name = f'step_{step_index:03d}.log'
+    #     file_path = os.path.join(self.output_dir, file_name)
+
+    #     with open(file_path, 'w') as log_file:
+    #         # Write the full function code
+    #         if current_context:
+    #             function_code, starting_line_number = extract_function_from_file_with_line_numbers(current_context.file_path, current_context.line_number)
+
+    #             for line_no, line_content in enumerate(function_code.splitlines(), start=starting_line_number):
+    #                 # Mark the line being executed with "=>"
+    #                 if step['step_type'] == 'code_line' and step['line_number'] == line_no:
+    #                     log_file.write(f"=> {line_no:4d}: {line_content}\n")
+    #                 else:
+    #                     log_file.write(f"   {line_no:4d}: {line_content}\n")
+
+    #                 # Insert preserved and new variables for the executed line
+    #                 all_vars_for_this_line = self.execution_tracker.get_variables_for_line(line_no)
+    #                 if all_vars_for_this_line:
+    #                     log_file.write('             """\n')
+    #                     variable_strings = []
+    #                     for vars_at_step in all_vars_for_this_line:
+    #                         for name, value in vars_at_step.items():
+    #                             variable_strings.append(f"            {name} = {value}")
+    #                             if isinstance(value, (list, dict)):
+    #                                 variable_strings.append(f"            len({name}) = {len(value)}")
+
+    #                     log_file.write("\n".join(variable_strings) + "\n")
+    #                     log_file.write('             """\n')
+
+    #             log_file.write("=" * 80 + '\n')
+
+    #         # Write return statement
+    #         if step['step_type'] == 'function_return':
+    #             log_file.write(f"Return Statement:\n  Function Name: {step['function_name']}\n  Return Value: {step['return_value']}\n")
+    #             log_file.write("=" * 80 + '\n')
+
+
     def write_log_file(self, step):
         current_context = self.execution_tracker.get_current_context()
         step_index = len(os.listdir(self.output_dir)) + 1
@@ -221,30 +261,39 @@ class LogParser:
         with open(file_path, 'w') as log_file:
             # Write the full function code
             if current_context:
-                function_code, starting_line_number = extract_function_from_file_with_line_numbers(current_context.file_path, current_context.line_number)
+                try:
+                    function_code, starting_line_number = extract_function_from_file_with_line_numbers(current_context.file_path, current_context.line_number)
+                except FileNotFoundError:
+                    log_file.write(f"Error: File {current_context.file_path} not found.\n")
+                    return
 
                 for line_no, line_content in enumerate(function_code.splitlines(), start=starting_line_number):
                     # Mark the line being executed with "=>"
                     if step['step_type'] == 'code_line' and step['line_number'] == line_no:
-                        log_file.write(f"=> {line_no:4d}: {line_content}\n")
+                        log_file.write(f"=>{line_no:4d}: {line_content}\n")
                     else:
-                        log_file.write(f"   {line_no:4d}: {line_content}\n")
+                        log_file.write(f"  {line_no:4d}: {line_content}\n")
+
+                    # Calculate leading spaces in line_content
+                    leading_spaces = len(line_content) - len(line_content.lstrip())
+
+                    # Calculate total indentation based on the position of {line_content} (including leading spaces)
+                    indent_length = len(f"   {line_no:4d}: ") + leading_spaces
+                    indent = ' ' * indent_length
 
                     # Insert preserved and new variables for the executed line
                     all_vars_for_this_line = self.execution_tracker.get_variables_for_line(line_no)
                     if all_vars_for_this_line:
-                        log_file.write('             """\n')
+                        log_file.write(f"{indent}\"\"\"\n")
                         variable_strings = []
                         for vars_at_step in all_vars_for_this_line:
                             for name, value in vars_at_step.items():
-                                variable_strings.append(f"            {name} = {value}")
+                                variable_strings.append(f"{indent}{name} = {value}")
                                 if isinstance(value, (list, dict)):
-                                    variable_strings.append(f"            len({name}) = {len(value)}")
+                                    variable_strings.append(f"{indent}len({name}) = {len(value)}")
 
                         log_file.write("\n".join(variable_strings) + "\n")
-                        # Add separator between variables
-                        # log_file.write("\n---\n".join(variable_strings) + "\n")
-                        log_file.write('             """\n')
+                        log_file.write(f"{indent}\"\"\"\n")
 
                 log_file.write("=" * 80 + '\n')
 
@@ -252,6 +301,7 @@ class LogParser:
             if step['step_type'] == 'function_return':
                 log_file.write(f"Return Statement:\n  Function Name: {step['function_name']}\n  Return Value: {step['return_value']}\n")
                 log_file.write("=" * 80 + '\n')
+
 
 
 def extract_function_from_file_with_line_numbers(file_path, line_number):
@@ -288,7 +338,7 @@ def extract_function_from_file_with_line_numbers(file_path, line_number):
 
 
 if __name__ == "__main__":
-    log_file_path = './logs/sample.log'
+    log_file_path = './logs/funcname-20240902_102545.log'
     output_dir = './logs/steps'
 
     log_parser = LogParser(log_file_path, output_dir)

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Viewer</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <!-- Include Prism.js and the CSS theme for syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/themes/prism.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/components/prism-python.min.js"></script>
+</head>
+<body>
+
+<div class="controls">
+    <button id="prev-btn">Prev</button>
+    <input type="range" id="step-slider" min="1" max="27" value="1">
+    <button id="next-btn">Next</button>
+    <span id="step-indicator">Step 1 of 27</span>
+</div>
+
+<div class="columns-container">
+    <!-- Previous log column -->
+    <div class="code-container">
+        <h3>Previous Log</h3>
+        <pre class="code-block"><code id="prev-log-display" class="language-python"></code></pre>
+    </div>
+
+    <!-- Next log column -->
+    <div class="code-container">
+        <h3>Next Log</h3>
+        <pre class="code-block"><code id="next-log-display" class="language-python"></code></pre>
+    </div>
+</div>
+
+<script src="/static/js/main.js"></script>
+
+</body>
+</html>

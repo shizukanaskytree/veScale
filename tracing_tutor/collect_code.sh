@@ -20,7 +20,7 @@ collect_code() {
             if [[ "$(basename "$file")" != "__pycache__" ]]; then
                 collect_code "$file"
             fi
-        elif [ -f "$file" ] && [[ "$file" != *.log ]] && [[ "$file" != *.pyc ]] && [[ "$file" != "$OUTPUT_FILE" ]] && [[ "$(basename "$file")" != "collected_code.txt" ]]; then
+        elif [ -f "$file" ] && [[ "$file" != *.md ]] && [[ "$file" != *.log ]] && [[ "$file" != *.pyc ]] && [[ "$file" != "$OUTPUT_FILE" ]] && [[ "$(basename "$file")" != "collected_code.txt" ]]; then
             # Skip specific binary file, setup_project.sh, and collect_code.sh
             if [[ "$file" != "tracing_tutor/__pycache__/log_parser.cpython-310.pyc" ]] && [[ "$(basename "$file")" != "setup_project.sh" ]] && [[ "$(basename "$file")" != "collect_code.sh" ]]; then
                 echo "- $(basename "$file")" >> $OUTPUT_FILE

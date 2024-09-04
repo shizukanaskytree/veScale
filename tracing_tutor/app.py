@@ -1,3 +1,5 @@
+# import debugpy; debugpy.listen(5678); debugpy.wait_for_client(); debugpy.breakpoint()
+
 import re
 import ast
 import os
@@ -200,22 +202,66 @@ class LogParser:
                 log_file.write(f"Return Statement:\n  Function Name: {step['function_name']}\n  Return Value: {step['return_value']}\n")
                 log_file.write("=" * 80 + '\n')
 
+
+"""
+To ensure that extract_function_from_file_with_line_numbers preserves all code,
+including comments and empty lines, we need to avoid relying on ast.parse() and
+ast.unparse(), as they do not retain comments or blank lines. Instead, we should
+extract the function’s code directly by reading the source code as plain text and
+identifying the function boundaries using line numbers.
+"""
+# def extract_function_from_file_with_line_numbers(file_path, line_number):
+#     with open(file_path, 'r') as file:
+#         source = file.read()
+
+#     # Parse the source code into an AST
+#     tree = ast.parse(source)
+
+#     # Extract all function definitions
+#     functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+
+#     for func in functions:
+#         if func.lineno <= line_number < (func.end_lineno if hasattr(func, 'end_lineno') else float('inf')):
+#             function_code = ast.unparse(func)
+#             return function_code, func.lineno
+
+#     return None, None
+
+
 def extract_function_from_file_with_line_numbers(file_path, line_number):
     with open(file_path, 'r') as file:
-        source = file.read()
+        source_lines = file.readlines()
 
-    # Parse the source code into an AST
-    tree = ast.parse(source)
+    # Start searching for the function starting at the provided line_number
+    func_start = None
+    func_end = None
+    indent_level = None
+    for i, line in enumerate(source_lines):
+        if i + 1 == line_number and 'def ' in line:  # Start of the function
+            func_start = i
+            indent_level = len(line) - len(line.lstrip())  # Track the indentation level of the function
+            break
 
-    # Extract all function definitions
-    functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+    if func_start is None:
+        return None, None
 
-    for func in functions:
-        if func.lineno <= line_number < (func.end_lineno if hasattr(func, 'end_lineno') else float('inf')):
-            function_code = ast.unparse(func)
-            return function_code, func.lineno
+    # Find where the function ends based on indentation
+    for i, line in enumerate(source_lines[func_start + 1:], start=func_start + 1):
+        current_indent = len(line) - len(line.lstrip())
+        if current_indent <= indent_level and line.strip() and not line.lstrip().startswith('#'):
+            # Function ends when we encounter a line with less or equal indentation
+            func_end = i
+            break
 
-    return None, None
+    # If no function end found, assume it goes till the end of the file
+    if func_end is None:
+        func_end = len(source_lines)
+
+    # Extract the lines of the function, including comments and empty lines
+    function_code = ''.join(source_lines[func_start:func_end])
+
+    return function_code, func_start + 1
+
 
 if __name__ == "__main__":
     # Test with the sample.log file

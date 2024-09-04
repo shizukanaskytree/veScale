@@ -55,35 +55,35 @@ from snoop import spy
 
 logger = logging.getLogger(__file__)
 
-################################################################################
-import os
-import sys
-import socket
-import snoop
+# ################################################################################
+# import os
+# import sys
+# import socket
+# import snoop
 
-import datetime
-### Get the absolute path of the current file
-current_file_path = os.path.abspath(__file__)
-### Extract the file name without the extension
-file_name = os.path.splitext(os.path.basename(current_file_path))[0]
-### Extract the file extension without the dot
-file_extension = os.path.splitext(os.path.basename(current_file_path))[1][1:]
-### use different folders for a multiprocess program
-hostname = socket.gethostname()
-process_id = os.getpid()
-### Create a folder path by joining the directory of the current file with a new folder name
-### The new folder name includes 'logs-', the file name, and the file extension
-# log_folder = os.path.join(os.path.dirname(current_file_path), 'logs-' + file_name + '-' + file_extension)
-# log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-pid_{process_id}-{file_extension}')
-log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
-### Create the directory for the log folder if it doesn't already exist
-os.makedirs(log_folder, exist_ok=True)
-### Generate a timestamp in the format YYYYMMDD_HHMMSS
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+# import datetime
+# ### Get the absolute path of the current file
+# current_file_path = os.path.abspath(__file__)
+# ### Extract the file name without the extension
+# file_name = os.path.splitext(os.path.basename(current_file_path))[0]
+# ### Extract the file extension without the dot
+# file_extension = os.path.splitext(os.path.basename(current_file_path))[1][1:]
+# ### use different folders for a multiprocess program
+# hostname = socket.gethostname()
+# process_id = os.getpid()
+# ### Create a folder path by joining the directory of the current file with a new folder name
+# ### The new folder name includes 'logs-', the file name, and the file extension
+# # log_folder = os.path.join(os.path.dirname(current_file_path), 'logs-' + file_name + '-' + file_extension)
+# # log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-pid_{process_id}-{file_extension}')
+# log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
+# ### Create the directory for the log folder if it doesn't already exist
+# os.makedirs(log_folder, exist_ok=True)
+# ### Generate a timestamp in the format YYYYMMDD_HHMMSS
+# timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-from snoop import spy  # not required if you use install()
-snoop.install(out=os.path.join(log_folder, f"funcname-{timestamp}.log"))
-################################################################################
+# from snoop import spy  # not required if you use install()
+# snoop.install(out=os.path.join(log_folder, f"funcname-{timestamp}.log"))
+# ################################################################################
 
 
 def maybe_tensor(tensor):
@@ -248,7 +248,7 @@ class CostGraph:
             cat * 2 * self.n_stage * self.n_micro + chunk * self.n_stage * self.n_micro + stage * self.n_micro + micro
         )
 
-    @spy(depth=2, watch_explode=['self'])
+    # @spy(depth=2, watch_explode=['self'])
     def try_v_schedule(self, fill_f=True, fill_b=True, approved_bubble=None):
         count = []
         for i in range(self.n_stage):

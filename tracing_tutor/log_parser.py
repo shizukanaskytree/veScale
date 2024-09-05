@@ -255,7 +255,7 @@ class LogParser:
     def write_log_file(self, step):
         current_context = self.execution_tracker.get_current_context()
         step_index = len(os.listdir(self.output_dir)) + 1
-        file_name = f'step_{step_index:03d}.log'
+        file_name = f'step_{step_index:03d}.py'
         file_path = os.path.join(self.output_dir, file_name)
 
         with open(file_path, 'w') as log_file:

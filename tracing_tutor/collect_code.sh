@@ -16,8 +16,8 @@ collect_code() {
     local dir="$1"
     for file in "$dir"/*; do
         if [ -d "$file" ]; then
-            # Exclude __pycache__ directories and recursive call if it's a directory
-            if [[ "$(basename "$file")" != "__pycache__" ]]; then
+            # Exclude __pycache__ and logs directories, and recursive call if it's another directory
+            if [[ "$(basename "$file")" != "__pycache__" ]] && [[ "$(basename "$file")" != "logs" ]]; then
                 collect_code "$file"
             fi
         elif [ -f "$file" ] && [[ "$file" != *.md ]] && [[ "$file" != *.log ]] && [[ "$file" != *.pyc ]] && [[ "$file" != "$OUTPUT_FILE" ]] && [[ "$(basename "$file")" != "collected_code.txt" ]]; then

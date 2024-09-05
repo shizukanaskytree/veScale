@@ -11,7 +11,7 @@ def index():
 
 @app.route('/steps/<int:step_number>', methods=['GET'])
 def get_step(step_number):
-    step_file = f'step_{step_number:03d}.log'
+    step_file = f'step_{step_number:03d}.py'
     step_path = os.path.join(LOGS_DIR, step_file)
 
     if os.path.exists(step_path):

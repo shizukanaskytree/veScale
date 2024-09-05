@@ -1,6 +1,17 @@
-let currentStep = 27;
-let totalSteps = 50;  // Adjust total steps dynamically if needed
+let currentStep = 0;
+let totalSteps = 200;  // Adjust total steps dynamically if needed
 let sliderIsBeingDragged = false;
+
+// Function to initialize the slider range based on currentStep and totalSteps
+function initializeSlider() {
+    const slider = document.getElementById('step-slider');
+    slider.min = currentStep;  // Set the starting point to currentStep
+    slider.max = totalSteps;   // Set the ending point to totalSteps
+    slider.value = currentStep; // Set the initial value to currentStep
+}
+
+// Call this function when the page loads to initialize the slider
+initializeSlider();
 
 document.getElementById('step-slider').addEventListener('input', (event) => {
     sliderIsBeingDragged = true;
@@ -15,7 +26,7 @@ document.getElementById('step-slider').addEventListener('change', (event) => {
 });
 
 document.getElementById('prev-btn').addEventListener('click', () => {
-    if (currentStep > 1) {
+    if (currentStep > parseInt(document.getElementById('step-slider').min)) {
         currentStep--;
         updateStep(true);
     }

@@ -216,6 +216,12 @@ class CostGraph:
             cat * 2 * self.n_stage * self.n_micro + chunk * self.n_stage * self.n_micro + stage * self.n_micro + micro
         )
 
+    """
+    死皮赖脸的问 chatgpt.
+    https://github.com/shizukanaskytree/veScale.git
+    2024-0828-pp-timeline
+    commit id: 97a8c0f7b4b14f2d6bdf09e8dee4480abd30ec0f
+    """
     def try_v_schedule(self, fill_f=True, fill_b=True, approved_bubble=None):
         count = []
         for i in range(self.n_stage):
@@ -247,6 +253,62 @@ class CostGraph:
             put(2, chunk_, stage)
 
         def put(cat, chunk, stage, assert_cnt=True):
+            """
+            ### 任务类型解释
+
+            根据代码的说明：
+
+            - `cat`（任务类别）分为三种类型（F, B, W），分别代表不同的计算操作（例如前向传播、反向传播和权重更新）。
+            - 每个 `cat` 都分为两块 `chunk`，因此对于每个 `cat`，我们有两个任务块（chunk 0 和 chunk 1）。
+
+            ### 分析
+
+            假设 `count` 中的每个数值代表一个阶段中不同任务的执行情况：
+
+            - `count[0][0] = 8`：第一个阶段中，任务 F 的第一个 chunk 执行了 8 次。
+            - `count[0][1] = 6`：第一个阶段中，任务 F 的第二个 chunk 执行了 6 次。
+            - `count[0][2] = 6`：第一个阶段中，任务 B 的第一个 chunk 执行了 6 次。
+            - `count[0][3] = 3`：第一个阶段中，任务 B 的第二个 chunk 执行了 3 次。
+            - `count[0][4] = 6`：第一个阶段中，任务 W 的第一个 chunk 执行了 6 次。
+            - `count[0][5] = 3`：第一个阶段中，任务 W 的第二个 chunk 执行了 3 次。
+
+            其他阶段（如 `count[1]`, `count[2]`, `count[3]`）的解释类似。
+
+            在这段代码中，`count` 是一个二维列表，表示不同阶段 (`stage`) 下不同任务类型的执行次数。这个二维列表中的每个元素都是一个整数，表示特定任务在特定阶段被执行的次数。
+
+            让我们逐步解析 `count = [[8, 6, 6, 3, 6, 3], [8, 7, 6, 3, 5, 3], [8, 7, 5, 4, 5, 3], [8, 8, 5, 4, 4, 4]]` 中的数字含义：
+
+            ### 解释二维列表的结构
+
+            - `count[i][j]`：表示第 `i` 个 `stage`（阶段）中，第 `j` 个任务的执行次数。
+
+            - 每一行 `[8, 6, 6, 3, 6, 3]` 代表一个阶段（`stage`），比如：
+            - `count[0]` 表示第一个阶段的执行情况，其中：
+                - `count[0][0] = 8` 表示第一个任务类型的第一块（chunk 0）在第一个阶段执行了8次。
+                - `count[0][1] = 6` 表示第一个任务类型的第二块（chunk 1）在第一个阶段执行了6次。
+                - `count[0][2] = 6` 表示第二个任务类型的第一块在第一个阶段执行了6次。
+                - `count[0][3] = 3` 表示第二个任务类型的第二块在第一个阶段执行了3次。
+                - 以此类推。
+
+            ### 总结
+
+            - `count` 表示了在不同阶段中，各种任务类型的执行次数。
+            - 每个任务类型（F, B, W）又分为两个块（chunk 0 和 chunk 1），所以每个 `stage` 中会有 6 个数字，分别表示这 6 个任务块的执行次数。
+
+            这些信息用来确保每个阶段中的任务按照指定的次数被执行，以实现正确的调度和优化。
+            """
+
+
+            """
+            stage_str = list:
+            [
+                'F1  F2  F3  F4  F5  F6  F7  f1  B1  W1  f2  B2  ... b1  w1  f5  B5  W5  b2  w2  f6  B6  W6  b3  w3  ',
+                '    F1  F2  F3  F4  F5  f1  F6  f2  B1  W1  f3  ... B4  W4  F8  b2  w2  f6  B5  W5  b3  w3  f7  B6  ',
+                '        F1  F2  F3  f1  F4  f2  F5  f3  B1  W1  ... b2  w2  f6  B4  W4  F8  b3  w3  f7  B5  W5  b4  ',
+                '            F1  f1  F2  f2  F3  f3  F4  f4  B1  ... W3  F7  b3  w3  f7  B4  W4  F8  b4  w4  f8  B5  '
+            ]
+            """
+
             _tmp = _no_bubble = cur_time[stage] + self.fbw_cost[cat]
             _cnt = count[stage][cat * 2 + chunk]
             if _cnt >= self.n_micro:
@@ -961,7 +1023,266 @@ def vescale_zbv_forward():
     ### 总结
 
     `vescale_zbv_forward()` 函数就像在工厂的流水线上完成任务。它负责把任务的每一步处理好，并且在每一步中确保所需的材料准备好，结果正确传递。通过这个函数，整个流程的计算可以顺利进行，最终得到满意的结果。
+    """
 
+
+    """
+    好的，我们结合代码来形象地解释每个部分，这样你可以更好地理解代码和它对应的操作。
+
+    ### 1. 机器人操作员的安排
+
+    ```python
+    inst = builder.user_data["inst"]
+    chunk_id = inst.chunk
+    stage_id = inst.stage
+    mbx = inst.minibatch
+    cur_model = builder.model[chunk_id]
+    ```
+
+    这里，操作员首先要了解当前的任务在哪个阶段（`stage_id`）和使用哪个机器人部件（`chunk_id`）。他还需要知道当前要处理的数据是哪一小部分（`mbx`），并根据这些信息获取当前要使用的“机器人部件”（`cur_model`）。
+
+    ### 2. 获取工具和数据
+
+    ```python
+    user_data = builder.user_data
+    forward_data_store = user_data["forward_data_store"]
+    input_tensors = user_data["input_tensors"]
+    output_tensors = user_data["output_tensors"]
+
+    constant_data = builder.constant_data
+    autocast_dtype = constant_data["autocast_dtype"]
+    enable_autocast = constant_data["enable_autocast"]
+    ```
+
+    操作员从储藏室（`user_data` 和 `constant_data`）中取出他需要的工具和材料，比如输入的“能量块”（`input_tensors`）和输出的“工具包”（`output_tensors`）。如果任务需要特殊模式（`enable_autocast`），他也会提前准备好。
+
+    ### 3. 检查任务阶段
+
+    ```python
+    is_pp_first_stage = stage_id == 0 and chunk_id == 0
+    is_pp_last_stage = stage_id == 0 and chunk_id == 1
+    ```
+
+    操作员现在要检查这是不是任务的第一步（`is_pp_first_stage`），如果是，他需要做一些额外的准备工作。如果是最后一步（`is_pp_last_stage`），他也要特别处理结果。
+
+    ### 4. 找到合适的输入
+
+    ```python
+    input_tensor = None
+    for cur_item in input_tensors[chunk_id]:
+        if cur_item is not None and cur_item[1] == mbx:
+            input_tensor = cur_item[0]
+
+    if not is_pp_first_stage:
+        assert input_tensor is not None
+    ```
+
+    操作员在工具箱里翻找，确保他找到了正确的“能量块”（`input_tensor`）来驱动机器。如果这不是第一步，那必须确认工具已经准备好。
+
+    ### 5. 是否需要特殊模式
+
+    ```python
+    if enable_autocast:
+        context_manager = torch.autocast("cuda", dtype=autocast_dtype)
+    else:
+        context_manager = contextlib.nullcontext()
+    ```
+
+    如果任务需要开启特殊模式（`autocast`），比如夜视模式，操作员会在这个“上下文管理器”（`context_manager`）里开启这个模式，否则就使用普通模式。
+
+    ### 6. 准备任务
+
+    ```python
+    def prepare_data():
+        model_chunk_id = builder.user_data["model_chunk_id"]
+        ground_truth = []
+        if builder.user_data["is_pp_first_stage"]:
+            true_input_tensor = next(builder.dataloader[model_chunk_id])
+            # keep the input tensor in builder
+            if len(input_tensors[chunk_id]) == len(output_tensors[chunk_id]) + 1:
+                true_input_tensor.requires_grad_()
+                builder.user_data["input_tensors"][chunk_id].pop()
+                builder.user_data["input_tensors"][chunk_id].append((true_input_tensor, mbx))
+        else:
+            local_tensors = next(builder.dataloader[model_chunk_id])
+            if isinstance(local_tensors, Sequence) and len(local_tensors) > 1:
+                ground_truth.append(local_tensors[-1])
+            elif isinstance(local_tensors, Dict) and "labels" in local_tensors:
+                ground_truth.append(local_tensors["labels"])
+            true_input_tensor = builder.user_data["p2p_tensors"]
+            if isinstance(true_input_tensor, Sequence):
+                true_input_tensor = true_input_tensor[0]
+
+        return (true_input_tensor,), {}, ground_truth
+    ```
+
+    在这个部分，操作员调用了一个“准备数据”的函数。他从“数据加载器”（`builder.dataloader`）中取出当前任务需要的“真材实料”（`true_input_tensor`），这些是机器人接下来需要处理的数据。
+
+    ### 7. 执行任务
+
+    ```python
+    args, kwargs, ground_truth = builder.user_data["prepare_data_fn"]()
+    builder.user_data["ground_truth"] = ground_truth
+    output_tensor = cur_model(*args, **kwargs)
+    ```
+
+    现在，操作员把准备好的数据传给机器人部件（`cur_model`），让它开始执行任务。任务完成后，机器人会返回一个“结果”（`output_tensor`），就像搬完东西后，机器人告诉你“我完成了”。
+
+    ### 8. 任务完成后的处理
+
+    ```python
+    if is_pp_last_stage:
+        output_tensor, loss_tensor = registed_functions["vescale_zbv_loss_fn"](output_tensor)
+        forward_data_store.append((output_tensor, loss_tensor))
+        output_tensor = output_tensor if builder.loss_fn is None else loss_tensor
+    ```
+
+    如果这是任务的最后一步，操作员会检查机器人给出的结果，并计算损失（`loss_tensor`），确保任务的效果是预期的。
+
+    ### 9. 准备下一步
+
+    ```python
+    if stage_id + 1 == builder.constant_data["total_stages"] and chunk_id == 0:
+        builder.user_data["input_tensor"] = (output_tensor, mbx)
+        builder.user_data["input_tensors"][chunk_id + 1].append((output_tensor, mbx))
+    ```
+
+    如果任务还没有结束，操作员会把这次任务的结果传给下一个机器人部件，为下一步做好准备。
+
+    ### 10. 最终收尾
+
+    ```python
+    builder.user_data["output_tensors"][chunk_id].append(output_tensor)
+    user_data["output_tensor"] = output_tensor
+    ```
+
+    最后，操作员把所有结果汇总起来，完成整个任务的处理。
+
+    通过这些操作，机器人能够一步步地完成复杂的任务，而操作员则确保每个步骤都顺利进行，最终得出满意的结果。
+    """
+
+
+    """
+    ================================================
+    让我们通过一个生动的例子来解释这个 `prepare_data` 函数。
+    ================================================
+
+    想象一下，我们要准备一道菜，而这个函数就是厨师在厨房里准备食材的步骤。
+
+    ### 厨师的准备工作
+
+    1. **确定使用的食材和工具：**
+
+    ```python
+    model_chunk_id = builder.user_data["model_chunk_id"]
+    ground_truth = []
+    ```
+
+    首先，厨师会从冰箱里拿出需要的食材（`model_chunk_id`），并准备一个空盘子（`ground_truth`），这个盘子会用来盛装最终做好的菜。
+
+    2. **判断是不是第一次做这道菜：**
+
+    ```python
+    if builder.user_data["is_pp_first_stage"]:
+    ```
+
+    接着，厨师要检查这是不是第一次做这道菜（`is_pp_first_stage`）。如果是第一次，那么他需要从头开始准备所有的食材。
+
+    3. **从冰箱里取出主材料：**
+
+    ```python
+    true_input_tensor = next(builder.dataloader[model_chunk_id])
+    ```
+
+    厨师打开冰箱（`builder.dataloader`），取出主要的食材（`true_input_tensor`），比如蔬菜或肉类，这是这道菜的核心部分。
+
+    4. **检查并调整食材：**
+
+    ```python
+    if len(input_tensors[chunk_id]) == len(output_tensors[chunk_id]) + 1:
+        true_input_tensor.requires_grad_()
+        builder.user_data["input_tensors"][chunk_id].pop()
+        builder.user_data["input_tensors"][chunk_id].append((true_input_tensor, mbx))
+    ```
+
+    厨师会检查食材是否准备得当（`input_tensors` 和 `output_tensors`）。如果发现冰箱里的食材还没准备好（比如还需要洗或切），他会对食材进行处理（`requires_grad_()`），并把处理好的食材放回到食材列表中。
+
+    5. **如果不是第一次做菜：**
+
+    ```python
+    else:
+        local_tensors = next(builder.dataloader[model_chunk_id])
+        if isinstance(local_tensors, Sequence) and len(local_tensors) > 1:
+            ground_truth.append(local_tensors[-1])
+        elif isinstance(local_tensors, Dict) and "labels" in local_tensors:
+            ground_truth.append(local_tensors["labels"])
+        true_input_tensor = builder.user_data["p2p_tensors"]
+        if isinstance(true_input_tensor, Sequence):
+            true_input_tensor = true_input_tensor[0]
+    ```
+
+    如果这道菜已经做过几次了，厨师会从冰箱里直接取出一些已经准备好的配菜（`local_tensors`），并将这些配菜放到盘子里（`ground_truth`）。他还会检查之前是否有未用完的主材料（`p2p_tensors`），如果有，也会继续使用。
+
+        这段代码的逻辑是处理“如果这不是第一次做菜”的情况。具体来说，它涉及如何处理和准备已经存在的数据。让我们逐步理解这个过程。
+
+        ### 1. 从数据加载器获取数据
+
+        ```python
+        local_tensors = next(builder.dataloader[model_chunk_id])
+        ```
+
+        在这一步，代码从数据加载器（`builder.dataloader`）中获取一组数据（`local_tensors`），这相当于从冰箱里拿出一盘已经准备好的配菜。这个 `local_tensors` 可能包含多个元素，比如一组输入数据或者标签。
+
+        ### 2. 检查数据的类型和内容
+
+        ```python
+        if isinstance(local_tensors, Sequence) and len(local_tensors) > 1:
+            ground_truth.append(local_tensors[-1])
+        ```
+
+        接下来，代码检查 `local_tensors` 是不是一个序列（`Sequence`），比如列表或元组。如果是，并且序列中有多个元素，代码就会把序列中的最后一个元素（`local_tensors[-1]`）添加到 `ground_truth` 这个列表中。这个过程就像是把配菜中的某个特别重要的部分，比如配菜的调味料，单独挑出来放到盘子里（`ground_truth`）。
+
+        ### 3. 处理字典类型的数据
+
+        ```python
+        elif isinstance(local_tensors, Dict) and "labels" in local_tensors:
+            ground_truth.append(local_tensors["labels"])
+        ```
+
+        如果 `local_tensors` 不是一个序列，而是一个字典（`Dict`），代码会检查字典里有没有“标签”（`labels`）这个关键字。如果有，它就会把这个标签添加到 `ground_truth` 中。这相当于从一盘混合的菜里找出其中的标签部分，并放到 `ground_truth` 盘子里。
+
+        ### 4. 获取之前保存的输入数据
+
+        ```python
+        true_input_tensor = builder.user_data["p2p_tensors"]
+        ```
+
+        然后，代码从 `builder.user_data` 中取出之前保存的输入数据（`true_input_tensor`）。这个数据可能是之前的任务留下的“剩菜”，需要继续使用。
+
+        ### 5. 检查输入数据的类型
+
+        ```python
+        if isinstance(true_input_tensor, Sequence):
+            true_input_tensor = true_input_tensor[0]
+        ```
+
+        最后，代码检查这个 `true_input_tensor` 是不是一个序列。如果是，它就会取出序列中的第一个元素作为最终的输入数据。这一步相当于从一碗“剩菜”里挑出最主要的一块食材，准备继续用在接下来的菜肴制作中。
+
+        ### 总结
+
+        这一部分代码主要是处理那些已经存在的数据——可能是之前步骤的“剩余物”或者已经准备好的数据。它通过检查数据的类型和内容，决定如何将它们添加到接下来的处理流程中。这确保了即使在非初始阶段，程序也能正确地处理和利用现有的数据，继续完成任务。
+
+    6. **最终准备工作：**
+
+    ```python
+    return (true_input_tensor,), {}, ground_truth
+    ```
+
+    最后，厨师将所有准备好的食材整理好，返回主要的食材（`true_input_tensor`），一个空字典（因为暂时没有额外的配料），以及已经放到盘子里的配菜（`ground_truth`）。
+
+    ### 总结
+
+    这个 `prepare_data` 函数就像是厨师在厨房里准备食材的过程。它会根据当前的任务是新任务还是已进行过的任务，来决定如何从冰箱里取出食材、调整准备，并最终整理出一个准备好烹饪的食材列表。这些食材随后会被送到锅里（在函数外的部分）进行烹饪，最终呈现出一道美味的菜肴。
     """
     inst = builder.user_data["inst"]
     chunk_id = inst.chunk

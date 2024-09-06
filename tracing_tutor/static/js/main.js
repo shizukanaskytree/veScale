@@ -1,5 +1,5 @@
-let currentStep = 0;
-let totalSteps = 200;  // Adjust total steps dynamically if needed
+let currentStep = 400;
+let totalSteps = 800;  // Adjust total steps dynamically if needed
 let sliderIsBeingDragged = false;
 
 // Function to initialize the slider range based on currentStep and totalSteps

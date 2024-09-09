@@ -32,4 +32,6 @@
 *.distcp
 .metadata
 examples/nanogpt_4D_finetune/data/shakespeare/
-tracing_tutor/logs/steps/*
+tracing_tutor/logs/*
+tracing_tutor/timeline_figs/*
+examples/llama2_4D_finetune/data/shakespeare/

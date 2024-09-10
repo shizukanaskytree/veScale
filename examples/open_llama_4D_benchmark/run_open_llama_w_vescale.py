@@ -43,7 +43,7 @@ args = parser.parse_args()
 
 assert args.total_bsz % args.dp == 0, f"total batch size {args.total_bsz} is not divisiable by dp size {args.dp}"
 bsz = args.total_bsz // args.dp
-s = 2048
+s = 16
 
 # init model
 if args.no_ckpt:
@@ -51,10 +51,15 @@ if args.no_ckpt:
     config = AutoConfig.from_pretrained(os.path.join(dir_path, "config.json"))
     model = LlamaModel(config)
 else:
-    model = AutoModelForCausalLM.from_pretrained("openlm-research/open_llama_7b")
+    # model = AutoModelForCausalLM.from_pretrained("openlm-research/open_llama_7b")
+    model = AutoModelForCausalLM.from_pretrained("openlm-research/open_llama_3b")
     model = model.model
     config = model.config
 assert s <= config.max_position_embeddings
+
+# print yellow text
+print(f"\033[93m{model}\033[0m")
+
 
 # --------  training config --------
 device_mesh = init_device_mesh(

@@ -35,3 +35,5 @@ examples/nanogpt_4D_finetune/data/shakespeare/
 tracing_tutor/logs/*
 tracing_tutor/timeline_figs/*
 examples/llama2_4D_finetune/data/shakespeare/
+examples/nanogpt_4D_finetune/tfboard_gogogo/out
+examples/nanogpt_4D_finetune/out

@@ -296,6 +296,18 @@ X, Y = get_batch("train")  # Use the input part of the batch (X) as the sample i
 # Logging the model architecture and input
 writer.add_graph(model, X)
 
+### Manually log weights and their shapes, ensuring they are cast to a supported type
+for name, param in model.named_parameters():
+    if param.requires_grad:
+        shape = tuple(param.shape)  # Get the shape of the parameter
+        # Log the shape as text
+        writer.add_text(f'{name}_shape', str(shape), 0)
+        
+        # Convert BFloat16 to Float32 (or any supported type) if necessary
+        if param.dtype == torch.bfloat16:
+            param = param.float()
+        writer.add_histogram(f'{name}_weights', param, 0)  # 0 refers to the global step here
+
 # Close the writer after logging
 writer.close()
 

@@ -51,6 +51,12 @@ import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group, barrier, broadcast, all_reduce
 
+import torch.onnx
+from torchviz import make_dot
+from torchview import draw_graph
+import torchexplorer
+import wandb
+
 from model import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
@@ -140,7 +146,7 @@ device_type = "cuda" if "cuda" in device else "cpu"  # for later use in torch.au
 ptdtype = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[dtype]
 
 # poor man's data loader
-data_dir = os.path.join("data", dataset)
+data_dir = os.path.join("../data", dataset)
 
 
 def get_batch(split, bsz=batch_size, lbsz=local_batch_size):
@@ -228,7 +234,77 @@ if block_size < model.config.block_size:
 model.to(device)
 model.to(ptdtype)
 
+# print yellow text
 print(f"\033[93m{model}\033[0m")
+
+### --- ONNX EXPORT USING REAL INPUT FROM `get_batch()` START ---
+
+# # Fetch a real input batch for ONNX export
+# X, _ = get_batch("train")  # Use the input part of the batch (X) as the sample input
+
+# # Path to save the ONNX model
+# onnx_file_path = os.path.join(out_dir, "gpt_model.onnx")
+
+# # Export the model to ONNX using real input batch X
+# torch.onnx.export(
+#     model,                  # the model to be exported
+#     X,                      # real input tensor (X) from get_batch
+#     onnx_file_path,         # output ONNX file path
+#     export_params=False,     # store the trained parameters in the ONNX model
+#     opset_version=14,       # ONNX version
+#     input_names=['input'],  # model input names
+#     output_names=['output'],# model output names
+#     dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}  # dynamic batch size
+# )
+
+# print(f"Model exported to {onnx_file_path}")
+
+### --- ONNX EXPORT USING REAL INPUT END ---
+
+
+### --- Torchviz visualization START ---
+# X, Y = get_batch("train")  # Use the input part of the batch (X) as the sample input
+# logits, loss = model(X, Y)
+# make_dot(logits, params=dict(list(model.named_parameters())), show_attrs=True, show_saved=True).render("rnn_torchviz", format="png")
+### --- Torchviz visualization END ---
+
+### --- torchexplorer visualization START ---
+### fail
+# torchexplorer.setup() # Call once before wandb.init(), not needed for standalone
+# wandb.init()
+# torchexplorer.watch(model, backend='wandb')  # wandb, standalone For local visualization
+### --- torchexplorer visualization END ---
+
+
+
+### --- tfboard visualization START ---
+from torch.utils.tensorboard import SummaryWriter
+
+# Initialize TensorBoard writer
+writer = SummaryWriter(log_dir=os.path.join(out_dir, 'logs'))
+
+# Your model initialization
+# (Make sure the model is on the correct device)
+model.to(device)
+
+X, Y = get_batch("train")  # Use the input part of the batch (X) as the sample input
+
+# Log the model architecture and input to TensorBoard
+# Example input to match the model's expected input format
+# dummy_input = torch.randint(0, model.config.vocab_size, (batch_size, block_size), dtype=torch.long).to(device)
+
+# Logging the model architecture and input
+writer.add_graph(model, X)
+
+# Close the writer after logging
+writer.close()
+
+print("Model graph and metrics are logged to TensorBoard.")
+
+### tensorboard --logdir=out/logs
+
+### --- tfboard visualization END ---
+
 
 # optimizer
 optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)

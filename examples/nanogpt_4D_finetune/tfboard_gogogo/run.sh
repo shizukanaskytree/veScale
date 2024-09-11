@@ -1,0 +1,1 @@
+python base_train.py --batch_size=1 --compile=False --dataset="shakespeare"

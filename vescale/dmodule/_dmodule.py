@@ -15,6 +15,47 @@
 #
 ################################################################################
 
+
+# ################################################################################
+# import os
+# import sys
+# import socket
+# import snoop #  pip install birdseye
+# import datetime
+# from snoop import spy  # not required if you use install()
+
+# ### Get the absolute path of the current file
+# current_file_path = os.path.abspath(__file__)
+
+# ### Extract the file name without the extension
+# file_name = os.path.splitext(os.path.basename(current_file_path))[0]
+
+# ### Extract the file extension without the dot
+# file_extension = os.path.splitext(os.path.basename(current_file_path))[1][1:]
+
+# ### use different folders for a multiprocess program
+# hostname = socket.gethostname()
+# process_id = os.getpid()
+
+# # Generate a timestamp in the format YYYYMMDD_HHMMSS
+# timestamp = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
+
+# # Create the main logs directory if it doesn't exist
+# main_logs_dir = os.path.join(os.path.dirname(current_file_path), 'logs', timestamp)
+# os.makedirs(main_logs_dir, exist_ok=True)
+
+# # Create a folder inside 'logs' directory by joining the main logs path with a new folder name
+# # The new folder name includes 'logs-', the file name, hostname, and process ID
+# log_folder = os.path.join(main_logs_dir, f'logs-{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
+
+# # Create the log directory if it doesn't already exist
+# os.makedirs(log_folder, exist_ok=True)
+
+# # Set up snoop with a log file inside the log folder
+# snoop.install(out=os.path.join(log_folder, f"parallelize_module-{timestamp}.log"))
+# ################################################################################
+
+
 import collections
 import re
 import difflib
@@ -129,6 +170,7 @@ class DModule:
         pi.normalize_placements(mesh_ndim)
         return pi  # valid PI
 
+    # @spy() # , watch_explode=['self'], depth=2 # place below the @staticmethod
     @staticmethod
     def register_sharding_plan(
         module: nn.Module,

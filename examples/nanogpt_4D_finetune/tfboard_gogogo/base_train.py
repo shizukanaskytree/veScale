@@ -301,8 +301,8 @@ for name, param in model.named_parameters():
     if param.requires_grad:
         shape = tuple(param.shape)  # Get the shape of the parameter
         # Log the shape as text
-        writer.add_text(f'{name}_shape', str(shape), 0)
-        
+        writer.add_text(f'{name}', str(shape), 0)
+
         # Convert BFloat16 to Float32 (or any supported type) if necessary
         if param.dtype == torch.bfloat16:
             param = param.float()

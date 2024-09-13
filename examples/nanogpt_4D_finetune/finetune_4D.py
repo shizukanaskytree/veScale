@@ -35,18 +35,24 @@
 # file_name = os.path.splitext(os.path.basename(current_file_path))[0]
 # ### Extract the file extension without the dot
 # file_extension = os.path.splitext(os.path.basename(current_file_path))[1][1:]
+
 # ### use different folders for a multiprocess program
 # hostname = socket.gethostname()
 # process_id = os.getpid()
-# ### Create a folder path by joining the directory of the current file with a new folder name
-# ### The new folder name includes 'logs-', the file name, and the file extension
-# # log_folder = os.path.join(os.path.dirname(current_file_path), 'logs-' + file_name + '-' + file_extension)
-# # log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-pid_{process_id}-{file_extension}')
-# log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
-# ### Create the directory for the log folder if it doesn't already exist
+
+# # Generate a timestamp in the format YYYYMMDD_HHMMSS
+# timestamp = datetime.datetime.now().strftime("%Y_%m%d_%H%M_%S")
+
+# # Create the main logs directory if it doesn't exist
+# main_logs_dir = os.path.join(os.path.dirname(current_file_path), 'logs', timestamp)
+# os.makedirs(main_logs_dir, exist_ok=True)
+
+# # Create a folder inside 'logs' directory by joining the main logs path with a new folder name
+# # The new folder name includes 'logs-', the file name, hostname, and process ID
+# log_folder = os.path.join(main_logs_dir, f'logs-{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
+
+# # Create the log directory if it doesn't already exist
 # os.makedirs(log_folder, exist_ok=True)
-# ### Generate a timestamp in the format YYYYMMDD_HHMMSS
-# timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # ### usage:
 # ### @pysnooper.snoop(os.path.join(log_folder, f"funcname-{timestamp}.log"), color=False, max_variable_length=2000)
@@ -66,9 +72,8 @@
 # # print(f"repo_path: {repo_path}")
 # ### 建议手动写, 有时 git 获得 repo_path 会报错
 
-
 # repo_path = "/root/vescale_prj/veScale/"
-# torch_path = "/usr/local/lib/python3.10/dist-packages/torch/"
+# # torch_path = "/usr/local/lib/python3.10/dist-packages/torch/"
 
 # profiling_paths = []
 # profiling_paths.append(repo_path)
@@ -396,7 +401,7 @@ def main():
     print(model)
 
     # + + + parallelize the model and wrap it with DDP using veScale APIs
-    if ddp:
+    if ddp: ### 进入 ddp 分支
         model = parallelize_module(
             model, VESCALE_DEVICE_MESH["TP"], nanoGPT_plan_dist_dropout if use_dist_dropout else nanoGPT_plan
         )
@@ -605,7 +610,8 @@ if __name__ == "__main__":
     # ### This line stores the original standard output stream (sys.stdout) in the
     # ### variable original_stdout. This allows you to write trace messages to both
     # ### the trace file and the console.
-    # original_stdout = sys.stdout
+    # # original_stdout = sys.stdout
+    # original_stdout = None
 
     # ### Set the profile function with the output file
     # ### - sys.setprofile: This function sets the system's profiling function,

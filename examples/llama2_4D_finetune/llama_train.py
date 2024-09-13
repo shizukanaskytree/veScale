@@ -38,7 +38,7 @@
 # process_id = os.getpid()
 
 # # Generate a timestamp in the format YYYYMMDD_HHMMSS
-# timestamp = datetime.datetime.now().strftime("%Y_%m%d_%H%M%_S")
+# timestamp = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
 
 # # Create the main logs directory if it doesn't exist
 # main_logs_dir = os.path.join(os.path.dirname(current_file_path), 'logs', timestamp)

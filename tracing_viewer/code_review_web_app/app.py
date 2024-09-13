@@ -106,7 +106,7 @@ def get_function_code():
         })
 
 def load_log_file():
-    log_file_path = os.path.join('logs', 'tracing-test_schedule-20240829_071457.log')
+    log_file_path = os.path.join('logs', 'nanogpt', 'tracing-finetune_4D-20240827_192332.log')
     logs = parse_log_file(log_file_path)
 
     global call_stack_tree

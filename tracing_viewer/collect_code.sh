@@ -17,7 +17,7 @@ collect_code() {
     for file in "$dir"/*; do
         if [ -d "$file" ]; then
             collect_code "$file" # Recursive call if it's a directory
-        elif [ -f "$file" ] && [[ "$file" != *.log ]]; then
+        elif [ -f "$file" ] && [[ "$file" != *.log ]] && [[ "$file" != *.md ]] && [[ "$file" != *.ipynb ]]; then
             echo "- $(basename "$file")" >> $OUTPUT_FILE
             echo "" >> $OUTPUT_FILE
             cat "$file" >> $OUTPUT_FILE

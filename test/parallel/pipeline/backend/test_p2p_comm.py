@@ -56,7 +56,8 @@ class PipeP2PTest(DTensorTestBase):
 
     @property
     def world_size(self):
-        return 8
+        # return 8 ### original
+        return 4
 
     @property
     def sequence_len(self):

@@ -303,7 +303,7 @@ class LogParser:
                 log_file.write("=" * 80 + '\n')
 
 
-
+### a correct and updated is in tracing_viewer/plot_tracing_tree.ipynb, it can handle @staticmethod then function name situation.
 def extract_function_from_file_with_line_numbers(file_path, line_number):
     with open(file_path, 'r') as file:
         source_lines = file.readlines()

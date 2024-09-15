@@ -33,6 +33,8 @@ from vescale.pipe.pipe_emmiter import ScheduleEngine
 
 
 # ################################################################################
+# ###               Global view: tracing function call                         ###
+# ################################################################################
 # import datetime
 # import os
 # import sys
@@ -48,15 +50,20 @@ from vescale.pipe.pipe_emmiter import ScheduleEngine
 # ### use different folders for a multiprocess program
 # hostname = socket.gethostname()
 # process_id = os.getpid()
-# ### Create a folder path by joining the directory of the current file with a new folder name
-# ### The new folder name includes 'logs-', the file name, and the file extension
-# # log_folder = os.path.join(os.path.dirname(current_file_path), 'logs-' + file_name + '-' + file_extension)
-# # log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-pid_{process_id}-{file_extension}')
-# log_folder = os.path.join(os.path.dirname(current_file_path), f'logs-{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
-# ### Create the directory for the log folder if it doesn't already exist
+
+# # Generate a timestamp in the format YYYYMMDD_HHMMSS
+# timestamp = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
+
+# # Create the main logs directory if it doesn't exist
+# main_logs_dir = os.path.join(os.path.dirname(current_file_path), 'logs', timestamp)
+# os.makedirs(main_logs_dir, exist_ok=True)
+
+# # Create a folder inside 'logs' directory by joining the main logs path with a new folder name
+# # The new folder name includes 'logs-', the file name, hostname, and process ID
+# log_folder = os.path.join(main_logs_dir, f'{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
+
+# # Create the log directory if it doesn't already exist
 # os.makedirs(log_folder, exist_ok=True)
-# ### Generate a timestamp in the format YYYYMMDD_HHMMSS
-# timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # ### usage:
 # ### @pysnooper.snoop(os.path.join(log_folder, f"funcname-{timestamp}.log"), color=False, max_variable_length=2000)
@@ -75,14 +82,7 @@ from vescale.pipe.pipe_emmiter import ScheduleEngine
 # # repo_path = repo.git.rev_parse("--show-toplevel")
 # # print(f"repo_path: {repo_path}")
 # ### 建议手动写, 有时 git 获得 repo_path 会报错
-
-
-# repo_path = "/root/vescale_prj/veScale/"
-# # torch_path = "/usr/local/lib/python3.10/dist-packages/torch/"
-
-# profiling_paths = []
-# profiling_paths.append(repo_path)
-# # profiling_paths.append(torch_path)
+# repo_path = "/root/vescale_prj/veScale"
 
 # ### 你可以修改 tracefunc 函数以仅将输出写入文件而不打印在终端上。你只需要移除将消息写入 original_stdout 的部分
 # def tracefunc(frame, event, arg, indent=[0], output_file=None, original_stdout=None):
@@ -103,8 +103,7 @@ from vescale.pipe.pipe_emmiter import ScheduleEngine
 #     if file_path:
 #         file_path = os.path.abspath(file_path)
 #         ### Check if the code is within the desired directory or repository
-#         # if file_path.startswith(repo_path):
-#         if any(file_path.startswith(repo_path) for repo_path in profiling_paths):
+#         if file_path.startswith(repo_path):
 #             if event == "call":
 #                 ### Increases the indentation level.
 #                 indent[0] += 2
@@ -124,7 +123,6 @@ from vescale.pipe.pipe_emmiter import ScheduleEngine
 #                     original_stdout.write(msg)
 #                 indent[0] -= 2
 #     return tracefunc
-
 # ################################################################################
 
 
@@ -552,7 +550,8 @@ class PipelineScheduleTest(DTensorTestBase):
         # ### This line stores the original standard output stream (sys.stdout) in the
         # ### variable original_stdout. This allows you to write trace messages to both
         # ### the trace file and the console.
-        # original_stdout = sys.stdout
+        # # original_stdout = sys.stdout
+        # original_stdout = None
 
         # ### Set the profile function with the output file
         # ### - sys.setprofile: This function sets the system's profiling function,
@@ -610,7 +609,6 @@ class PipelineScheduleTest(DTensorTestBase):
                     print(f"mlp{idx}.grad is {output.grad}")
                 print(" ====================================== ")
 
-        ### 获得分布式调度的损失值
         fwd_plan = {
             ".input": [[Replicate()]],
             ".output": [[Replicate()]],

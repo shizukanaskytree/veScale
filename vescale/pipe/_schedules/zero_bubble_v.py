@@ -288,7 +288,7 @@ class CostGraph:
             chunk: macrobatch 数据切块
             stage: 模型切块
             """
-            print(f"rank: {dist.get_rank() if dist.is_initialized() else 0}, cat: {cat}, chunk: {chunk}, stage: {stage}")
+            # print(f"rank: {dist.get_rank() if dist.is_initialized() else 0}, cat: {cat}, chunk: {chunk}, stage: {stage}")
 
             _tmp = _no_bubble = cur_time[stage] + self.fbw_cost[cat]
             _cnt = count[stage][cat * 2 + chunk]

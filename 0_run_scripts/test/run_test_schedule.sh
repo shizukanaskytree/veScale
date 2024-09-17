@@ -22,3 +22,6 @@ torchrun --nproc_per_node=1 test/parallel/pipeline/instruction/test_schedule.py 
 ### ndtimeline
 torchrun --nproc_per_node=1 test/parallel/pipeline/instruction/test_schedule.py -k test_runtime_engine_with_profiling
 
+export NCCL_DEBUG=OFF
+torchrun --nproc_per_node=1 test/parallel/pipeline/instruction/test_schedule.py -k test_gpt_zerobubble_engine
+

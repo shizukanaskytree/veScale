@@ -1,128 +1,3 @@
-################################################################################
-# Copyright (c) 2022 Andrej Karpathy
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-################################################################################
-# Modification Copyright 2023 ByteDance Ltd. and/or its affiliates.
-################################################################################
-
-# ################################################################################
-# import datetime
-# import os
-# import sys
-# import socket
-# # import pysnooper
-
-# ### Get the absolute path of the current file
-# current_file_path = os.path.abspath(__file__)
-# ### Extract the file name without the extension
-# file_name = os.path.splitext(os.path.basename(current_file_path))[0]
-# ### Extract the file extension without the dot
-# file_extension = os.path.splitext(os.path.basename(current_file_path))[1][1:]
-
-# ### use different folders for a multiprocess program
-# hostname = socket.gethostname()
-# process_id = os.getpid()
-
-# # Generate a timestamp in the format YYYYMMDD_HHMMSS
-# timestamp = datetime.datetime.now().strftime("%Y_%m%d_%H%M_%S")
-
-# # Create the main logs directory if it doesn't exist
-# main_logs_dir = os.path.join(os.path.dirname(current_file_path), 'logs', timestamp)
-# os.makedirs(main_logs_dir, exist_ok=True)
-
-# # Create a folder inside 'logs' directory by joining the main logs path with a new folder name
-# # The new folder name includes 'logs-', the file name, hostname, and process ID
-# log_folder = os.path.join(main_logs_dir, f'logs-{file_name}-host_{hostname}-pid_{process_id}-{file_extension}')
-
-# # Create the log directory if it doesn't already exist
-# os.makedirs(log_folder, exist_ok=True)
-
-# ### usage:
-# ### @pysnooper.snoop(os.path.join(log_folder, f"funcname-{timestamp}.log"), color=False, max_variable_length=2000)
-# ### def xxx:                 ...
-
-# #-----------------------------------------------------------------------------#
-
-# ### global overview
-
-# ### pip install GitPython
-# # import git
-
-# ### Check if the code is within the desired directory or repository
-# # repo = git.Repo('.', search_parent_directories=True)
-# ### Get the repo path
-# # repo_path = repo.git.rev_parse("--show-toplevel")
-# # print(f"repo_path: {repo_path}")
-# ### 建议手动写, 有时 git 获得 repo_path 会报错
-
-# repo_path = "/root/vescale_prj/veScale/"
-# # torch_path = "/usr/local/lib/python3.10/dist-packages/torch/"
-
-# profiling_paths = []
-# profiling_paths.append(repo_path)
-# # profiling_paths.append(torch_path)
-
-# ### 你可以修改 tracefunc 函数以仅将输出写入文件而不打印在终端上。你只需要移除将消息写入 original_stdout 的部分
-# def tracefunc(frame, event, arg, indent=[0], output_file=None, original_stdout=None):
-#     """
-#     tracefunc is defined to trace the execution of functions. It takes several parameters:
-#         frame: The current stack frame.
-#         event: The type of event that occurred (e.g., "call", "return").
-#         arg: Additional argument (not used in this code).
-#         indent: A list used to keep track of the indentation level for the output.
-#         output_file: A file object where trace messages will be written.
-#         original_stdout: The original standard output stream for console logging.
-#     """
-#     ### Get the file path and line number of the code being executed
-#     file_path = frame.f_globals.get('__file__')
-#     line_num = frame.f_lineno
-
-#     ### If file_path is not None, it's converted to an absolute path.
-#     if file_path:
-#         file_path = os.path.abspath(file_path)
-#         ### Check if the code is within the desired directory or repository
-#         # if file_path.startswith(repo_path):
-#         if any(file_path.startswith(repo_path) for repo_path in profiling_paths):
-#             if event == "call":
-#                 ### Increases the indentation level.
-#                 indent[0] += 2
-#                 ### Constructs a message indicating the function call with the function name, file path, and line number.
-#                 msg = f"{'-' * indent[0]}> call function {frame.f_code.co_name} in {file_path}:{line_num}\n"
-#                 ### Writes the message to both output_file and original_stdout.
-#                 output_file.write(msg)
-#                 if original_stdout:
-#                     original_stdout.write(msg)
-#             elif event == "return":
-#                 ### Constructs a message indicating the function exit with the function name, file path, and line number.
-#                 msg = f"<{'-' * indent[0]} exit function {frame.f_code.co_name} in {file_path}:{line_num}\n"
-#                 ### Writes the message to both output_file and original_stdout.
-#                 output_file.write(msg)
-#                 ### Decreases the indentation level.
-#                 if original_stdout:
-#                     original_stdout.write(msg)
-#                 indent[0] -= 2
-#     return tracefunc
-
-# ################################################################################
-
-
 import os
 import time
 import math
@@ -333,7 +208,7 @@ def main():
     # attempt to derive vocab_size from the dataset
     meta_path = os.path.join(data_dir, "meta.pkl")
     meta_vocab_size = None
-    if os.path.exists(meta_path): # 没有进入这个分支, 没有 data/shakespeare/meta.pkl 文件
+    if os.path.exists(meta_path):
         with open(meta_path, "rb") as f:
             meta = pickle.load(f)
         meta_vocab_size = meta["vocab_size"]
@@ -359,12 +234,12 @@ def main():
         model_args["vocab_size"] = meta_vocab_size if meta_vocab_size is not None else 50304
         gptconf = GPTConfig(**model_args)
         model = GPT(gptconf)
-    elif init_from.startswith("gpt2"): # 进入这个分支
+    elif init_from.startswith("gpt2"):
         print(f"Initializing from OpenAI GPT-2 weights: {init_from}")
         # initialize from OpenAI GPT-2 weights
         override_args = dict(dropout=dropout)
         if init_from.startswith("gpt2"):
-            model = GPT.from_pretrained(init_from, override_args) # 使用此分支初始化了 gpt2 model
+            model = GPT.from_pretrained(init_from, override_args)
         else:
             model = GPT.from_pretrained("gpt2", override_args)
         # read off the created config params, so we can store them into checkpoint correctly
@@ -391,7 +266,7 @@ def main():
     scaler = torch.cuda.amp.GradScaler(enabled=True) if dtype == "float16" else None
 
     # compile the model
-    if compile: # 没有进入
+    if compile:
         print("WARNING: veScale does not support model compilation")
         print("compiling the model... (takes a ~minute)")
         unoptimized_model = model
@@ -400,7 +275,7 @@ def main():
     print(f"{yellow_color}Model has {sum(p.numel() for p in model.parameters()):,} parameters{reset_color}")
     print(model)
 
-    # + + + + + + parallelize the model and wrap it with DDP using veScale APIs + + + + + +
+    # + + + parallelize the model and wrap it with DDP using veScale APIs
     if ddp: ### 进入 ddp 分支
         model = parallelize_module(
             model, VESCALE_DEVICE_MESH["TP"], nanoGPT_plan_dist_dropout if use_dist_dropout else nanoGPT_plan
@@ -434,9 +309,8 @@ def main():
         extra_args = dict(fused=True) if use_fused else dict()
         base_optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
         print(f"using fused AdamW: {use_fused}")
-
-        # + + + + + + Initialize a ZeRO-2 optimizer using veScale API + + + + + +
-        if use_DO and ddp: # 进入这个分支
+        # + + + Initialize a ZeRO-2 optimizer using veScale API
+        if use_DO and ddp:
             optimizer = DistributedOptimizer(
                 base_optimizer,
                 models=[model],
@@ -498,12 +372,11 @@ def main():
         wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
     # Load checkpoint
-    # + + + + + + VeScale Load checkpoint + + + + + +
+    # + + + VeScale Load checkpoint
     if load_checkpoint_path:
         checkpoint_state = {"model": model, "optimizer": optimizer}
         vescale.checkpoint.load(load_checkpoint_path, checkpoint_state, broadcast_checkpoint=broadcast_checkpoint)
-    # + + + + + + VeScale API above + + + + + +
-
+    # + + + VeScale API above
     # training loop
     X, Y = get_batch("train")  # fetch the very first batch
     t0 = time.time()
@@ -535,27 +408,22 @@ def main():
             if iter_num > 0:
                 # When iter_num == 0, the training does not start sotoptimizer state is empty,
                 # Don't save checkpoint
-
-                # + + + + + + VeScale API below + + + + + +
+                # + + + VeScale API below
                 checkpoint_state = {"model": model, "optimizer": optimizer}
                 vescale.checkpoint.save(
                     os.path.join(save_checkpoint_path, f"iter_{iter_num}"),
                     checkpoint_state,
                     async_checkpoint=async_checkpoint,
                 )
-                # + + + + + + VeScale API above + + + + + +
-
-
+                # + + + VeScale API above
         if iter_num == 0 and eval_only:
             break
 
         # forward backward update, with optional gradient accumulation to simulate larger batch size
-
-        # + + + + + + VeScale API below + + + + + +
+        # + + + VeScale API below
         if ddp:
             model.zero_grad_buffer()
-        # + + + + + + VeScale API above + + + + + +
-
+        # + + + VeScale API above
         for micro_step in range(gradient_accumulation_steps):
             # with ctx:
             logits, loss = model(X, Y)
@@ -564,12 +432,10 @@ def main():
             X, Y = get_batch("train")
             # backward pass
             loss.backward()
-
-        # + + + + + + VeScale API below + + + + + +
+        # + + + VeScale API below
         if ddp:
             model.finish_grad_sync()
-        # + + + + + + VeScale API above + + + + + +
-
+        # + + + VeScale API above
         optimizer.step()
         # flush the gradients as soon as we can, no need for this memory anymore
         optimizer.zero_grad(set_to_none=True)
@@ -578,7 +444,6 @@ def main():
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
-
         # get loss as float. note: this is a CPU-GPU sync point
         # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
         if ddp:
@@ -605,40 +470,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # ############################################################################
-    # ### Open the file to save the trace output
-
-    # ### This constructs the path for the trace output file by joining log_folder
-    # ### with a filename that includes a timestamp. The timestamp variable is
-    # ### assumed to be a string representing the current time.
-    # tracing_filename = os.path.join(log_folder, f"tracing-{file_name}-{timestamp}.log")
-
-    # ### This opens the file in write mode ("w") and assigns the file object to
-    # ### output_file. This file will be used to save the trace output.
-    # output_file = open(tracing_filename, "w")
-
-    # ### This line stores the original standard output stream (sys.stdout) in the
-    # ### variable original_stdout. This allows you to write trace messages to both
-    # ### the trace file and the console.
-    # # original_stdout = sys.stdout
-    # original_stdout = None
-
-    # ### Set the profile function with the output file
-    # ### - sys.setprofile: This function sets the system's profiling function,
-    # ###   which is called on every function call and return.
-    # ### - lambda frame, event, arg: tracefunc(frame, event, arg,
-    # ###   output_file=output_file, original_stdout=original_stdout): This is a
-    # ###   lambda function that wraps the tracefunc with the additional arguments
-    # ###   output_file and original_stdout.
-    # ###   - frame: The current stack frame.
-    # ###   - event: The type of event (e.g., "call", "return").
-    # ###   - arg: Additional argument (not used in this code).
-    # ###   This lambda function ensures that every function call and return event
-    # ###   in the program is handled by tracefunc, which will log the event details
-    # ###   to the output_file and the console (original_stdout).
-    # sys.setprofile(lambda frame, event, arg: tracefunc(frame, event, arg, output_file=output_file, original_stdout=original_stdout))
-    # ############################################################################
-
     # -----------------------------------------------------------------------------
     config_keys = [k for k, v in globals().items() if not k.startswith("_") and isinstance(v, (int, float, bool, str))]
     exec(open("configurator.py").read())  # overrides from command line or config file

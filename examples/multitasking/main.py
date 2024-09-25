@@ -5,7 +5,7 @@ import pickle
 import inspect
 import sys
 import numpy as np
-
+from collections import defaultdict
 
 import torch
 from torch.distributed import broadcast, all_reduce, barrier, init_process_group, destroy_process_group, get_rank
@@ -35,6 +35,7 @@ from vescale.plan import (
 from vescale.pipe import PipeModule, construct_stage_modules, construct_pipeline_split_graph
 from vescale.engine import PipeEngine
 from vescale.pipe.pipe_stage import construct_pipeline_stage
+from vescale.pipe.pipe_emmiter import ScheduleEngine, StageDeps
 
 from model import GPTConfig, GPT
 
@@ -107,6 +108,107 @@ def print_distributed_model(model: nn.Module):
     ))
 
 
+
+def _align_num_batches(first_stage_rank, batches):
+    """
+    Aligns all ranks must have the same number of mini-batches as rank 0.
+
+    Let's walk through an example to illustrate the function `_align_num_batches` in a distributed training setup.
+
+    ### Scenario:
+    - Imagine we have **3 GPUs (ranks 0, 1, and 2)**, and we're performing some kind of parallel training.
+    - Each GPU might initially have a different number of mini-batches for some reason, but we want to make sure they all have the same number of batches as **rank 0**.
+    - We'll use `_align_num_batches` to ensure that all GPUs (ranks) are aligned to the same number of batches as rank 0.
+
+    ### Example:
+    - **Rank 0** (first_stage_rank): 64 batches
+    - **Rank 1**: 60 batches
+    - **Rank 2**: 62 batches
+
+    We want all ranks to have 64 batches (same as rank 0).
+
+    ### Code Simulation:
+    Let's simulate how the function works with this example.
+
+    #### Initial values:
+    ```python
+    # Assume we are at Rank 1 (which initially has 60 batches)
+    first_stage_rank = 0
+    batches = 60  # Rank 1's initial number of batches
+
+    #### What happens on each rank:
+
+    1. **Rank 0 (first_stage_rank):**
+    - Input: `batches = 64`
+    - This rank broadcasts its value of `64` to all other ranks.
+    - No change in `batches`, as it is already 64.
+
+    ```python
+    num_batches = torch.tensor([64], dtype=torch.int64).cuda(0)
+    dist.broadcast(num_batches, src=0)  # Broadcasts 64 to ranks 1 and 2
+    # is_consistent = 64 == 64 (True), no change needed
+    return 64
+    ```
+
+    2. **Rank 1:**
+    - Input: `batches = 60`
+    - It receives the broadcasted value of `64` from rank 0.
+    - It compares `60` (local `batches`) with `64` (broadcasted value), and since
+    they are different, it updates its `batches` to `64`.
+
+    ```python
+    num_batches = torch.tensor([60], dtype=torch.int64).cuda(1)  # Create local tensor
+    dist.broadcast(num_batches, src=0)  # Receives 64 from rank 0
+
+    # is_consistent = 60 == 64 (False), so update batches to 64
+    batches = num_batches.item()  # Now batches = 64
+    return 64
+    ```
+
+    3. **Rank 2:**
+    - Input: `batches = 62`
+    - It receives the broadcasted value of `64` from rank 0.
+    - It compares `62` (local `batches`) with `64` (broadcasted value), and since
+    they are different, it updates its `batches` to `64`.
+
+    ```python
+    num_batches = torch.tensor([62], dtype=torch.int64).cuda(2)  # Create local tensor
+    dist.broadcast(num_batches, src=0)  # Receives 64 from rank 0
+
+    # is_consistent = 62 == 64 (False), so update batches to 64
+    batches = num_batches.item()  # Now batches = 64
+    return 64
+    ```
+
+    ### Final Result:
+
+    - **Rank 0**: 64 batches (unchanged).
+    - **Rank 1**: Now has 64 batches (updated from 60).
+    - **Rank 2**: Now has 64 batches (updated from 62).
+
+    Now all ranks are aligned with the same number of batches, ensuring consistency
+    across the distributed training process.
+
+    ### Why is this important?
+
+    In distributed training, especially in pipeline or model parallelism, if
+    different GPUs (ranks) have different numbers of mini-batches, the synchronization
+    between them might break. This can lead to crashes or inefficiencies. By aligning
+    the number of mini-batches across all ranks, we ensure that the GPUs can proceed
+    in lockstep, avoiding synchronization issues.
+    """
+    num_batches = torch.tensor([batches], dtype=torch.int64).cuda(dist.get_rank())
+    dist.broadcast(num_batches, src=first_stage_rank)
+    is_consistent = num_batches.item() == batches
+    if not is_consistent:
+        batches = num_batches.item()
+    return batches
+
+
+
+
+
+
 def main():
     world_size = int(os.environ.get("WORLD_SIZE", 4))  # Default to 4 if WORLD_SIZE is not set
     rank = int(os.environ.get("RANK", 0))  # Default to 0 if RANK is not set
@@ -158,7 +260,7 @@ def main():
     dist.init_process_group(backend=backend)
 
     ### debug at rank 0
-    # debug_at_rank_n(3) # 有效
+    debug_at_rank_n(0) # 有效
 
 
     # device = f"cuda:{rank}" if torch.cuda.is_available() else "cpu"
@@ -191,15 +293,20 @@ def main():
     pipe_plan = PipelineParallelPlan(
         mode=ModeType.GRAPH_EAGER,
         split_method=PipelineSplitMethodType.MANUAL,
+        # split_method=PipelineSplitMethodType.AUTO,
+        # split_method=PipelineSplitMethodType.UNIFORM,
         num_stages=4,
         virtual_chunks=1,
         smallest_unsplittable_units=[f"transformer.h.{i}" for i in range(n_layer)],
         split_points=["transformer.h.3", "transformer.h.6", "transformer.h.9"],
         batch_p2p_comm=False,
         overlap_p2p_comm=True,
-        schedule_type=PipelineScheduleType.SIMPLE_1F1B,
+        # schedule_type=PipelineScheduleType.SIMPLE_1F1B,
+        schedule_type=PipelineScheduleType.ZERO_BUBBLE,
         forward_only=False,
     )
+
+
 
     VESCALE_DEVICE_MESH.init_device_mesh(
         device_type="cuda",
@@ -242,6 +349,351 @@ def main():
     #             use_distributed_optimizer=True,
     #         )
     #     )
+
+
+
+
+
+
+    #--------------------------------------------------------------------------#
+
+    def get_batch(split, bsz=batch_size, lbsz=local_batch_size):
+        """
+        Deterministic data loader for loss match:
+        This data loader ensures that the mini-batch sampling has identical behavior no matter how many GPUs are used.
+        """
+        data_dir = "data/shakespeare"
+
+        if split == "train":
+            data = np.memmap(os.path.join(data_dir, "train.bin"), dtype=np.uint16, mode="r")
+        else:
+            data = np.memmap(os.path.join(data_dir, "val.bin"), dtype=np.uint16, mode="r")
+
+        # Get random indices for the batch
+        ix = torch.randint(len(data) - block_size, (bsz,)).to(device)
+
+        # Broadcast indices to all processes if distributed
+        if world_size > 1:
+            torch.distributed.broadcast(ix, src=0, async_op=False)
+
+        ix = torch.split(ix, lbsz)[ddp_rank]  # Split indices among data parallel ranks
+
+        # Fetch the batch of data
+        x = torch.stack([torch.from_numpy(data[i : i + block_size].astype(np.int64)) for i in ix])
+        y = torch.stack([torch.from_numpy(data[i + 1 : i + 1 + block_size].astype(np.int64)) for i in ix])
+
+        # Move tensors to device
+        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
+
+        # Convert tensors to DTensor for distributed operation across devices
+        # if world_size > 1:
+        # x = distribute_tensor(x, VESCALE_DEVICE_MESH["TP"], [Replicate()])
+        # y = distribute_tensor(y, VESCALE_DEVICE_MESH["TP"], [Replicate()])
+
+        # Ensure returning exactly two tensors
+        return x, y
+
+
+
+
+    # Fetch the batch of data
+    x, y = get_batch("train", batch_size, local_batch_size)
+    print(f"x shape: {x.shape}, y shape: {y.shape}")
+
+    x, y = x.to(device), y.to(device)
+
+    # Convert the batch into an iterator or a list as needed
+    data_iterator = [x, y]  # Adjust depending on how your engine expects input
+
+    # data_iterator = [x, y]  # Data has already been converted to DTensor by get_batch()
+
+    #--------------------------------------------------------------------------#
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ### deps 可以这样获得, 也可以在下面另一个函数 build_schedule 中获得
+    # deps = get_linear_pp_module_dep2(model_list, VESCALE_DEVICE_MESH.get_global_tensor_parallel_meshes())
+
+
+    #--------------------------------------------------------------------------#
+    ### def build_schedule 来自于 class PipeEngine 内
+
+    # def build_schedule(self, minibatches, data_shape=None):
+    #     """
+    #     Build pipeline parallel training schedules.
+    #     """
+
+    ### 这个 minibatches 的值是多少? 谁调用了 build_schedule 函数?
+    minibatches = data_iterator
+
+
+
+    ### meshes = self.global_mesh.get_global_tensor_parallel_meshes()
+    meshes = VESCALE_DEVICE_MESH.get_global_tensor_parallel_meshes()
+
+    ### dp_rank, tp_rank = self.global_mesh.get_data_parallel_rank(), self.global_mesh.get_tensor_parallel_rank()
+    dp_rank, tp_rank = VESCALE_DEVICE_MESH.get_data_parallel_rank(), VESCALE_DEVICE_MESH.get_tensor_parallel_rank()
+
+    tp_meshes_dict = defaultdict(list)
+
+    def _locate_tp_mesh(_rank):
+        for tp_mesh in meshes:
+            if _rank in tp_mesh.mesh.tolist():
+                return tp_mesh
+        else:
+            raise ValueError("TP submesh not found.")
+
+    for _rank in range(torch.distributed.get_world_size()):
+        ### _coordinate = self.global_mesh.get_strategy_coordinate(_rank)
+        _coordinate = VESCALE_DEVICE_MESH.get_strategy_coordinate(_rank)
+        tp_mesh = _locate_tp_mesh(_rank)
+        _dp_rank, _tp_rank = _coordinate[1], _coordinate[2]
+        tp_meshes_dict[(_dp_rank, _tp_rank)].append(tp_mesh)
+
+
+    new_meshes = tp_meshes_dict[(dp_rank, tp_rank)]
+    meshes = new_meshes
+
+    ### first_stage_rank = self.global_mesh.get_strategy_coordinate(local_rank=0)[0]
+    first_stage_rank = VESCALE_DEVICE_MESH.get_strategy_coordinate(local_rank=0)[0]
+
+    # FIXME: the input can either be PipeModule, or a sequence of DDP modules? In the latter case, how to get stage dependency
+    ### pipe_module = self.module
+
+    stage_dep_matrix, p2p_index_mapping = pipe_module.stage_deps, pipe_module.p2p_index_mapping
+    stage_dependency = StageDeps(
+        dep=stage_dep_matrix,
+        meshes=meshes,
+        vpp_module_list=pipe_module,
+        p2p_index_mapping=p2p_index_mapping,
+    )
+
+
+
+
+
+    num_minibatches = _align_num_batches(first_stage_rank, len(minibatches))
+
+    # TODO: insert shape inference
+    # batch_p2p_comm = self.engine_plan.batch_p2p_comm
+
+    # if on interleaved 1f1b schedule, set batch_p2p_comm to False to execute p2p communication
+    ### schedule_type = self.schedule_type
+    schedule_type = PipelineScheduleType.ZERO_BUBBLE
+
+    virtual_chunks_per_stage = pipe_plan.virtual_chunks
+
+    if schedule_type in [PipelineScheduleType.INTERLEAVED_1F1B, PipelineScheduleType.ZERO_BUBBLE]:
+
+        ### 这里的 virtual_chunks_per_stage 是多少, 当调用函数 build_schedule 时, 传入的参数是多少?
+        ### 来自于 pipe_plan: PipelineParallelPlan
+
+        data_iterator = [iter(minibatches) for _ in range(virtual_chunks_per_stage)]
+        batch_p2p_comm = False
+    elif schedule_type == PipelineScheduleType.SIMPLE_1F1B:
+        data_iterator = minibatches
+    else:
+        raise NotImplementedError(f"Schedule {schedule_type} not implemented yet.")
+
+
+    #--------------------------------------------------------------------------#
+
+
+
+    ### 用的数据相对准, 我用的是 huggingface demo 的 real example
+    ### https://huggingface.co/spaces/sail/zero-bubble-pipeline-parallellism/blob/main/v_schedule.py
+
+    ### 这个 settings 用来当做 doc 参考, 不删
+    # settings = [
+    #     # p,   n,     f,     b,     w,   c,    h,  a,  l
+    #     (8, 24, 18522, 18086, 9337, 601, 2304, 24, 24),
+    #     (8, 32, 18513, 18086, 9331, 626, 2304, 24, 24),
+    #     (8, 64, 18546, 18097, 9321, 762, 2304, 24, 24),
+    #     (8, 24, 29718, 29444, 19927, 527, 4096, 32, 32),
+    #     (8, 32, 29802, 29428, 19530, 577, 4096, 32, 32),
+    #     (8, 64, 29935, 29621, 19388, 535, 4096, 32, 32),
+    #     (16, 48, 11347, 11248, 8132, 377, 5120, 40, 48),
+    #     (16, 64, 11307, 11254, 8101, 379, 5120, 40, 48),
+    #     (16, 128, 11325, 11308, 8109, 378, 5120, 40, 48),
+    #     (32, 96, 10419, 10207, 7715, 408, 6144, 48, 64),
+    #     (32, 128, 10408, 10204, 7703, 408, 6144, 48, 64),
+    #     (32, 256, 10402, 10248, 7698, 460, 6144, 48, 64),
+    #     (4, 8, 6, 4, 4, 1, 4096, 32, 32),
+    #     (8, 24, 29444, 29718, 19927, 527, 4096, 32, 32),
+    #     ( 8, 32, 16099, 16504,  7589,  540, 2304, 24, 16),
+    #     (16, 48, 14407, 14380,  9676, 1610, 4096, 32, 32),
+    #     (16, 64, 14412, 14393,  9688, 1621, 4096, 32, 32),
+    #     (16, 128,14316, 14306,  9639, 1619, 4096, 32, 32),
+    #     (24, 72,  6763,  6969,  5251,  755, 5120, 40, 48),
+    #     (24, 96,  6783,  6984,  5259,  758, 5120, 40, 48),
+    #     (24, 192, 6785,  6990,  5260,  770, 5120, 40, 48),
+    #     (32,  96, 9458,  9748,  7288,  879, 6144, 48, 64),
+    #     (32, 128, 9469,  9744,  7306,  892, 6144, 48, 64),
+    #     (32, 256, 9447,  9644,  7193,  887, 6144, 48, 64),
+    # ]
+
+    s = 1024
+    p, n, f, b, w, c, h, a, l = (4, 8, 6, 4, 4, 1, 4096, 32, 32)
+    mem_f = 34 * h + 5 * a * s
+    mem_w = - 32 * h
+    mem_b = - mem_w - mem_f
+
+
+    # Pack costs and memory values into a dictionary
+    costs_and_mem = {
+        'f_cost': f,
+        'b_cost': b,
+        'w_cost': w,
+        'c_cost': c,
+        'f_mem': mem_f,
+        'b_mem': mem_b,
+        'w_mem': mem_w,
+        'max_mem': mem_f * 4 * 2,
+    }
+
+    data_shape = None
+    dtype = pipe_plan.p2p_tensor_dtype
+    overlap_p2p_comm = pipe_plan.overlap_p2p_comm
+
+
+
+
+    # loss_fn = lambda logits, targets: \
+    #     F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+
+    def loss_fn(logits, targets):
+        print(f"shape of logits: {logits.shape}, shape of targets: {targets.shape}")
+        """
+        Logits shape before reshaping: torch.Size([8, 1, 50304])
+        Targets shape before reshaping: torch.Size([8, 1024])
+        """
+
+
+        """
+        ideal:
+
+        logits.shape
+        torch.Size([4, 1024, 50304])
+
+        logits.view(-1, logits.size(-1)).shape
+        torch.Size([4096, 50304])
+
+        targets.shape
+        torch.Size([4, 1024])
+
+        targets.view(-1).shape
+        torch.Size([4096])
+        """
+
+
+        """
+        ideal:
+        logits.shape
+        torch.Size([1, 1024, 50304])
+        """
+        # Reshape logits and targets
+        logits = logits.view(-1, logits.size(-1))
+        """
+        ideal:
+        logits.view(-1, logits.size(-1)).shape
+        torch.Size([1024, 50304])
+        """
+
+
+        """
+        ideal:
+        targets.shape
+        torch.Size([1, 1024])
+        """
+        targets = targets.view(-1)
+        """
+        ideal:
+        targets.view(-1).shape
+        torch.Size([1024])
+        """
+
+        print(f"after reshape: shape of logits: {logits.shape}, shape of targets: {targets.shape}")
+        ### in this code: after reshape: shape of logits: torch.Size([8, 50304]), shape of targets: torch.Size([8192])
+
+        # Compute cross-entropy loss
+        loss = F.cross_entropy(logits, targets, ignore_index=-1)
+
+        return loss
+
+
+    global_mesh = VESCALE_DEVICE_MESH
+
+    forward_only = pipe_plan.forward_only
+
+    pipe_engine = ScheduleEngine(
+        deps=stage_dependency,
+        meshes=VESCALE_DEVICE_MESH.get_global_tensor_parallel_meshes(),
+        schedule=PipelineScheduleType.ZERO_BUBBLE,
+        batches=num_minibatches,
+        data_iterator=data_iterator,
+        stage_id=VESCALE_DEVICE_MESH.get_pipeline_parallel_rank(),
+        shape=data_shape,
+        dtype=dtype,
+        num_chunks=virtual_chunks_per_stage,
+        input_shapes=None,
+        input_shapes_unpad=None,
+        # send_dtypes_map=self.module.recv_dtypes_dict,
+        overlap_p2p_comm=overlap_p2p_comm,
+        batch_p2p_comm=batch_p2p_comm,
+        loss_fn=loss_fn,
+        global_mesh=global_mesh,
+        forward_only=forward_only,
+        **costs_and_mem,
+    )
+
+
+    ### this is the right way to do init
+    # pipe_engine = ScheduleEngine(
+    #     deps=deps,
+    #     meshes=VESCALE_DEVICE_MESH.get_global_tensor_parallel_meshes(),
+    #     schedule=PipelineScheduleType.ZERO_BUBBLE,
+    #     batches=batches,
+    #     data_iterator=[iter(data_iterator) for _ in range(num_chunks)],
+    #     stage_id=local_rank,
+    #     shape=(1, 1, 3),
+    #     dtype=torch.float32,
+    #     f_cost=6,
+    #     b_cost=4,
+    #     w_cost=4,
+    #     c_cost=1,
+    #     f_mem=mem_f,
+    #     b_mem=mem_b,
+    #     w_mem=mem_w,
+    #     max_mem=mem_f * 4 * 2,
+    # )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -335,68 +787,6 @@ def main():
 
 
 
-    # loss_fn = lambda logits, targets: \
-    #     F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
-
-    def loss_fn(logits, targets):
-        print(f"shape of logits: {logits.shape}, shape of targets: {targets.shape}")
-        """
-        Logits shape before reshaping: torch.Size([8, 1, 50304])
-        Targets shape before reshaping: torch.Size([8, 1024])
-        """
-
-
-        """
-        ideal:
-
-        logits.shape
-        torch.Size([4, 1024, 50304])
-
-        logits.view(-1, logits.size(-1)).shape
-        torch.Size([4096, 50304])
-
-        targets.shape
-        torch.Size([4, 1024])
-
-        targets.view(-1).shape
-        torch.Size([4096])
-        """
-
-
-        """
-        ideal:
-        logits.shape
-        torch.Size([1, 1024, 50304])
-        """
-        # Reshape logits and targets
-        logits = logits.view(-1, logits.size(-1))
-        """
-        ideal:
-        logits.view(-1, logits.size(-1)).shape
-        torch.Size([1024, 50304])
-        """
-
-
-        """
-        ideal:
-        targets.shape
-        torch.Size([1, 1024])
-        """
-        targets = targets.view(-1)
-        """
-        ideal:
-        targets.view(-1).shape
-        torch.Size([1024])
-        """
-
-        print(f"after reshape: shape of logits: {logits.shape}, shape of targets: {targets.shape}")
-        ### in this code: after reshape: shape of logits: torch.Size([8, 50304]), shape of targets: torch.Size([8192])
-
-        # Compute cross-entropy loss
-        loss = F.cross_entropy(logits, targets, ignore_index=-1)
-
-        return loss
-
 
     pipe_module.stage_modules[0].to(device)
     # print(pipe_module.stage_modules)
@@ -407,6 +797,8 @@ def main():
         loss_fn,
         pipe_plan,
     )
+
+    engine.schedule_engine = pipe_engine
 
 
 
@@ -443,104 +835,15 @@ def main():
 
 
 
-    # def get_batch(split, bsz=batch_size, lbsz=local_batch_size):
-    #     """
-    #     Deterministic data loader for loss match:
-    #     This data loader ensures that the mini-batch sampling has identical behavior no matter how many GPUs are used.
-    #     """
-    #     data_dir = "data/shakespeare"
-
-    #     if split == "train":
-    #         data = np.memmap(os.path.join(data_dir, "train.bin"), dtype=np.uint16, mode="r")
-    #     else:
-    #         data = np.memmap(os.path.join(data_dir, "val.bin"), dtype=np.uint16, mode="r")
-
-    #     # Get random indices for the batch
-    #     ix = torch.randint(len(data) - block_size, (bsz,)).to(device)
-
-    #     # Broadcast indices to all processes if distributed
-    #     if world_size > 1:
-    #         torch.distributed.broadcast(ix, src=0, async_op=False)
-
-    #     ix = torch.split(ix, lbsz)[ddp_rank]  # Split indices among data parallel ranks
-
-    #     # Fetch the batch of data
-    #     x = torch.stack([torch.from_numpy(data[i : i + block_size].astype(np.int64)) for i in ix])
-    #     y = torch.stack([torch.from_numpy(data[i + 1 : i + 1 + block_size].astype(np.int64)) for i in ix])
-
-    #     device_type = "cuda"
-    #     # Move tensors to device
-    #     if device_type == "cuda":
-    #         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-    #     else:
-    #         x, y = x.to(device), y.to(device)
-
-    #     if world_size > 1:
-    #         # Convert to DTensor for distributed operation
-    #         x = distribute_tensor(x, VESCALE_DEVICE_MESH["TP"], [Replicate()])
-    #         y = distribute_tensor(y, VESCALE_DEVICE_MESH["TP"], [Replicate()])
-
-    #     # Ensure returning exactly two tensors
-    #     return x, y
-
-
-
-
-
-    def get_batch(split, bsz=batch_size, lbsz=local_batch_size):
-        """
-        Deterministic data loader for loss match:
-        This data loader ensures that the mini-batch sampling has identical behavior no matter how many GPUs are used.
-        """
-        data_dir = "data/shakespeare"
-
-        if split == "train":
-            data = np.memmap(os.path.join(data_dir, "train.bin"), dtype=np.uint16, mode="r")
-        else:
-            data = np.memmap(os.path.join(data_dir, "val.bin"), dtype=np.uint16, mode="r")
-
-        # Get random indices for the batch
-        ix = torch.randint(len(data) - block_size, (bsz,)).to(device)
-
-        # Broadcast indices to all processes if distributed
-        if world_size > 1:
-            torch.distributed.broadcast(ix, src=0, async_op=False)
-
-        ix = torch.split(ix, lbsz)[ddp_rank]  # Split indices among data parallel ranks
-
-        # Fetch the batch of data
-        x = torch.stack([torch.from_numpy(data[i : i + block_size].astype(np.int64)) for i in ix])
-        y = torch.stack([torch.from_numpy(data[i + 1 : i + 1 + block_size].astype(np.int64)) for i in ix])
-
-        # Move tensors to device
-        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-
-        # Convert tensors to DTensor for distributed operation across devices
-        # if world_size > 1:
-        # x = distribute_tensor(x, VESCALE_DEVICE_MESH["TP"], [Replicate()])
-        # y = distribute_tensor(y, VESCALE_DEVICE_MESH["TP"], [Replicate()])
-
-        # Ensure returning exactly two tensors
-        return x, y
-
-
-
-    # Fetch the batch of data
-    x, y = get_batch("train", batch_size, local_batch_size)
-    print(f"x shape: {x.shape}, y shape: {y.shape}")
-
-    # Convert the batch into an iterator or a list as needed
-    data_iterator = [(x.to(device), y.to(device))]  # Adjust depending on how your engine expects input
-
-    # data_iterator = [x, y]  # Data has already been converted to DTensor by get_batch()
-
+    ### data_iterator
 
     # Pass the data to the engine for processing
-    minibatch_loss, outputs = engine(data_iterator)
+    minibatch_loss, outputs = engine(minibatch=data_iterator, reuse_schedule=True)
 
-    # Print loss and outputs
-    print(f"Minibatch Loss: {minibatch_loss}")
-    print(f"Outputs: {outputs}")
+
+    # # Print loss and outputs
+    # print(f"Minibatch Loss: {minibatch_loss}")
+    # print(f"Outputs: {outputs}")
 
 
 

@@ -126,6 +126,23 @@ from vescale.pipe.pipe_emmiter import ScheduleEngine
 # ################################################################################
 
 
+def debug_at_rank_n(rank_id):
+    """If distributed is initialized, print only on rank n."""
+    if torch.distributed.is_initialized():
+        if torch.distributed.get_rank() == rank_id:
+            message = f'debug at rank {torch.distributed.get_rank()}'
+            # print(message, flush=True)
+            ### print yellow color
+            print(f"\033[93m{message}\033[00m", flush=True)
+            import debugpy
+            debugpy.listen(5678)
+            debugpy.wait_for_client()
+            debugpy.breakpoint()
+    else:
+        message = 'You are not in distributed mode.'
+        print(message, flush=True)
+
+
 
 class MLP(nn.Module):
     def __init__(self, n_features):
@@ -568,6 +585,8 @@ class PipelineScheduleTest(DTensorTestBase):
         # ###   to the output_file and the console (original_stdout).
         # sys.setprofile(lambda frame, event, arg: tracefunc(frame, event, arg, output_file=output_file, original_stdout=original_stdout))
         # ############################################################################
+
+        debug_at_rank_n(0)
 
         # initialize global device mesh
         VESCALE_DEVICE_MESH.init_device_mesh(

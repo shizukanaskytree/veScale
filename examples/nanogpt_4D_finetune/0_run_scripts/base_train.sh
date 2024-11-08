@@ -1,0 +1,1 @@
+python base_train.py --batch_size=32 --compile=False
